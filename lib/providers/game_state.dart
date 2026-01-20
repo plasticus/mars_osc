@@ -86,7 +86,7 @@ class GameState extends ChangeNotifier {
     ship.missionEndTime = null;
 
     // Apply random wear and tear (10% to 25%)
-    double wear = (Random().nextInt(15) + 10) / 100;
+    double wear = (Random().nextInt(5) + 2) / 100;
     ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
   }
 
@@ -104,7 +104,7 @@ class GameState extends ChangeNotifier {
     if (shipIndex != -1) {
       final ship = fleet[shipIndex];
       double missingCondition = 1.0 - ship.condition;
-      int repairCost = (missingCondition * 500).toInt();
+      int repairCost = (missingCondition * 100).toInt();
 
       if (solars >= repairCost && missingCondition > 0) {
         solars -= repairCost;
