@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/ship_model.dart';
 import '../models/mission_model.dart';
+import '../services/mission_service.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -32,6 +33,7 @@ class GameState extends ChangeNotifier {
   List<Mission> availableMissions = [];
   List<LogEntry> missionLogs = [];
   
+  final MissionService _missionService = MissionService();
   Timer? _gameTimer;
 
   GameState() {
@@ -110,6 +112,17 @@ class GameState extends ChangeNotifier {
 
       availableMissions.removeWhere((m) => m.id == mission.id);
       
+      // Ensure "Local Scrap Run" is replaced immediately if it was the one taken
+      if (mission.title == "Local Scrap Run") {
+         availableMissions.add(_missionService.getLocalScrapRun());
+      } else {
+        // Also check if any scrap run exists, if not, add one
+        bool scrapExists = availableMissions.any((m) => m.title == "Local Scrap Run");
+        if (!scrapExists) {
+          availableMissions.add(_missionService.getLocalScrapRun());
+        }
+      }
+
       missionLogs.insert(0, LogEntry(
         timestamp: now,
         title: "Mission Launched",
@@ -124,7 +137,6 @@ class GameState extends ChangeNotifier {
     int reward = ship.pendingReward;
     solars += reward;
     
-    // REBALANCED WEAR: 1% to 4% damage per mission
     double wear = (Random().nextInt(4) + 1) / 100.0; 
     double oldCondition = ship.condition;
     ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
@@ -211,22 +223,18 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  // DYNAMIC REPAIR COST: Based on 20% of ship value for full 100% repair
   int getRepairCost(Ship ship) {
     double missingCondition = 1.0 - ship.condition;
     int shipValue = getShipSaleValue(ship);
     return (missingCondition * (shipValue * 0.2)).toInt();
   }
 
-  // DYNAMIC UPGRADE COST: Based on ship value and current stat level
   int getUpgradeCost(Ship ship, int currentLevel) {
     int shipValue = getShipSaleValue(ship);
-    // Base cost is 10% of ship value, scaled by level
     return ((shipValue * 0.1) * (1 + currentLevel * 0.2)).toInt();
   }
 
   int getShipSaleValue(Ship ship) {
-    // Value calculation based on current stats
     int baseStatsValue = (ship.speed + ship.cargoCapacity + ship.shieldLevel + ship.aiLevel + ship.fuelCapacity) * 50;
     double conditionMult = 0.5 + (ship.condition * 0.5);
     return (baseStatsValue * conditionMult).toInt();
@@ -283,6 +291,10 @@ class GameState extends ChangeNotifier {
 
   void updateMissions(List<Mission> newMissions) {
     availableMissions = newMissions;
+    // Always ensure a Scrap Run exists after a refresh
+    if (!availableMissions.any((m) => m.title == "Local Scrap Run")) {
+      availableMissions.add(_missionService.getLocalScrapRun());
+    }
     notifyListeners();
   }
 
