@@ -5,10 +5,10 @@ class MissionService {
   final Random _random = Random();
 
   final Map<String, List<double>> _classDistances = {
-    'Mule': [1.0, 3.0],      
-    'Sprinter': [1.5, 5.0],  
-    'Tanker': [5.0, 15.0],   
-    'Miner': [2.0, 8.0],     
+    'Mule': [1.0, 3.0],
+    'Sprinter': [1.5, 5.0],
+    'Tanker': [5.0, 15.0],
+    'Miner': [2.0, 8.0],
     'Harvester': [10.0, 30.0],
   };
 
@@ -19,7 +19,7 @@ class MissionService {
     for (int i = 0; i < count; i++) {
       String shipClass = _getRandomClass(scanArrayLevel);
       double distance = _getRandomDistance(shipClass);
-      
+
       int baseReward = (distance * (100 + _random.nextInt(100))).toInt();
       if (shipClass == 'Harvester') baseReward *= 3;
 
@@ -35,6 +35,23 @@ class MissionService {
         baseDurationMinutes: (distance * 20).toInt(),
       ));
     }
+
+    // NEW: Guaranteed Starter Mission
+    newMissions.add(Mission(
+      id: "starter_${DateTime.now().millisecondsSinceEpoch}",
+      title: "Local Scrap Run",
+      description: "A simple run to the nearest debris field. Perfect for rookies.",
+      requiredClass: "Mule", // Starter ship class
+      distanceAU: 0.5,
+      minShieldLevel: 1,
+      minCargo: 1,
+      rewardSolars: 50,
+      baseDurationMinutes: 5,
+    ));
+
+    // Shuffle so the starter isn't always at the end of the list
+    newMissions.shuffle();
+
     return newMissions;
   }
 
