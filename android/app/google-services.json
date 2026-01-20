@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "358044541015",
+    "project_id": "mosc-leaderboard",
+    "storage_bucket": "mosc-leaderboard.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:358044541015:android:3724917631a2b36a2d8312",
+        "android_client_info": {
+          "package_name": "com.coreym.mars_osc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbbmQijLsabLhee2kVTOsSvqX8JvHrS-M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
