@@ -136,10 +136,12 @@ class MissionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Select Ship for \${mission.title}",
+              // FIXED: Removed backslash from string interpolation
+              Text("Select Ship for ${mission.title}",
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              Text("Requires: \${mission.requiredClass} | \${mission.distanceAU} AU",
+              // FIXED: Removed backslash from string interpolation
+              Text("Requires: ${mission.requiredClass} | ${mission.distanceAU} AU",
                   style: const TextStyle(color: Colors.grey)),
               const Divider(height: 30),
               Expanded(
@@ -147,7 +149,6 @@ class MissionCard extends StatelessWidget {
                   itemCount: state.fleet.length,
                   itemBuilder: (context, index) {
                     final ship = state.fleet[index];
-                    // Call the logic check we built in the Mission Model
                     final String? error = mission.getMissingRequirement(ship);
                     final bool isBusy = ship.missionEndTime != null || ship.isRepairing;
 
@@ -164,7 +165,8 @@ class MissionCard extends StatelessWidget {
                           Navigator.pop(context); // Close sheet
                           Navigator.pop(context); // Return to Hangar
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("\${ship.nickname} launched!")),
+                            // FIXED: Removed backslash from string interpolation
+                            SnackBar(content: Text("${ship.nickname} launched!")),
                           );
                         },
                         child: const Text("LAUNCH"),
