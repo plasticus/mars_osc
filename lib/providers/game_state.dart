@@ -40,7 +40,6 @@ class GameState extends ChangeNotifier {
       fleet[shipIndex].missionEndTime = now.add(Duration(minutes: mission.baseDurationMinutes));
       fleet[shipIndex].pendingReward = mission.rewardSolars;
       
-      solars -= 50; 
       availableMissions.removeWhere((m) => m.id == mission.id);
       notifyListeners();
     }
