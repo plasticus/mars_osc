@@ -32,7 +32,7 @@ class MissionService {
         minShieldLevel: _random.nextInt(scanArrayLevel + 1),
         minCargo: (shipClass == 'Mule') ? 10 + _random.nextInt(10) : 1 + _random.nextInt(5),
         rewardSolars: baseReward,
-        baseDurationMinutes: (distance * 20).toInt(),
+        baseDurationMinutes: 1,
       ));
     }
 
@@ -46,7 +46,7 @@ class MissionService {
       minShieldLevel: 1,
       minCargo: 1,
       rewardSolars: 50,
-      baseDurationMinutes: 5,
+      baseDurationMinutes: 1,
     ));
 
     // Shuffle so the starter isn't always at the end of the list
