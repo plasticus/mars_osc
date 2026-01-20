@@ -17,7 +17,6 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
   @override
   void initState() {
     super.initState();
-    // Generate missions if the board is empty
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final state = Provider.of<GameState>(context, listen: false);
       if (state.availableMissions.isEmpty) {
@@ -30,35 +29,14 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Available Missions"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => _showBoardInfo(context),
-          )
-        ],
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: state.availableMissions.length,
-        itemBuilder: (context, index) {
-          final mission = state.availableMissions[index];
-          return MissionCard(mission: mission);
-        },
-      ),
-    );
-  }
-
-  void _showBoardInfo(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Mission Board"),
-        content: const Text("Missions refresh every 12 hours. Ensure your ship meets the Fuel, Shield, and Cargo requirements before launching."),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Got it"))],
-      ),
+    // No Scaffold/AppBar here as it's provided by MainNavigationScreen
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: state.availableMissions.length,
+      itemBuilder: (context, index) {
+        final mission = state.availableMissions[index];
+        return MissionCard(mission: mission);
+      },
     );
   }
 }
@@ -136,11 +114,9 @@ class MissionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // FIXED: Removed backslash from string interpolation
               Text("Select Ship for ${mission.title}",
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              // FIXED: Removed backslash from string interpolation
               Text("Requires: ${mission.requiredClass} | ${mission.distanceAU} AU",
                   style: const TextStyle(color: Colors.grey)),
               const Divider(height: 30),
@@ -162,10 +138,8 @@ class MissionCard extends StatelessWidget {
                           ? ElevatedButton(
                         onPressed: () {
                           state.startMission(ship.id, mission);
-                          Navigator.pop(context); // Close sheet
-                          Navigator.pop(context); // Return to Hangar
+                          Navigator.pop(context); // Close only the sheet
                           ScaffoldMessenger.of(context).showSnackBar(
-                            // FIXED: Removed backslash from string interpolation
                             SnackBar(content: Text("${ship.nickname} launched!")),
                           );
                         },

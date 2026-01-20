@@ -12,6 +12,21 @@ class MissionService {
     'Harvester': [10.0, 30.0],
   };
 
+  // Template for the guaranteed recurring mission
+  Mission getLocalScrapRun() {
+    return Mission(
+      id: "scrap_run_${DateTime.now().millisecondsSinceEpoch}",
+      title: "Local Scrap Run",
+      description: "A simple run to the nearest debris field. Reliable but low pay.",
+      requiredClass: "Mule",
+      distanceAU: 0.5,
+      minShieldLevel: 1,
+      minCargo: 1,
+      rewardSolars: 50,
+      baseDurationMinutes: 1,
+    );
+  }
+
   List<Mission> generateMissions(int scanArrayLevel) {
     int count = _getMissionCount(scanArrayLevel);
     List<Mission> newMissions = [];
@@ -36,20 +51,8 @@ class MissionService {
       ));
     }
 
-    // NEW: Guaranteed Starter Mission
-    newMissions.add(Mission(
-      id: "starter_${DateTime.now().millisecondsSinceEpoch}",
-      title: "Local Scrap Run",
-      description: "A simple run to the nearest debris field. Perfect for rookies.",
-      requiredClass: "Mule", // Starter ship class
-      distanceAU: 0.5,
-      minShieldLevel: 1,
-      minCargo: 1,
-      rewardSolars: 50,
-      baseDurationMinutes: 1,
-    ));
-
-    // Shuffle so the starter isn't always at the end of the list
+    // Always ensure at least one Local Scrap Run is in the initial generation
+    newMissions.add(getLocalScrapRun());
     newMissions.shuffle();
 
     return newMissions;
