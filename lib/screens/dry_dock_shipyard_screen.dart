@@ -19,11 +19,41 @@ class DryDockShipyardScreen extends StatelessWidget {
           title: const Text("SHIPYARD CATALOG"),
           bottom: TabBar(
             isScrollable: true,
-            tabs: shipClasses.map((c) => Tab(text: c)).toList(),
+            tabs: shipClasses.map((c) => Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(c),
+                  if (!state.isClassUnlocked(c)) 
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4.0),
+                      child: Icon(Icons.lock, size: 12, color: Colors.grey),
+                    ),
+                ],
+              ),
+            )).toList(),
           ),
         ),
         body: TabBarView(
           children: shipClasses.map((className) {
+            final isUnlocked = state.isClassUnlocked(className);
+            
+            if (!isUnlocked) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text("$className Class Locked", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text("Upgrade the Deep-Space Relay in Engineering", style: TextStyle(color: Colors.grey)),
+                    const Text("to unlock this sector of the shipyard.", style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              );
+            }
+
             final classShips = ShipTemplate.all.where((s) => s.shipClass == className).toList();
             return ListView.builder(
               padding: const EdgeInsets.all(8),
@@ -115,7 +145,7 @@ class ShipTemplateCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("${template.modelName} added to fleet!")),
       );
-      Navigator.pop(context); // Go back to Dry Dock after purchase
+      Navigator.pop(context);
     }
   }
 }

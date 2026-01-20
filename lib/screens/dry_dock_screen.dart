@@ -16,9 +16,7 @@ class _DryDockScreenState extends State<DryDockScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
-    
-    // dockedShips are those not on a mission (but might be being repaired/upgraded)
-    final dockedShips = state.fleet.where((s) => s.missionEndTime == null).toList();
+    final dryDockShips = state.fleet.where((s) => s.missionEndTime == null).toList();
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -42,7 +40,7 @@ class _DryDockScreenState extends State<DryDockScreen> {
           const SizedBox(height: 8),
           
           Expanded(
-            child: dockedShips.isEmpty
+            child: dryDockShips.isEmpty
                 ? Center(
                     child: Text(
                       state.fleet.isEmpty 
@@ -53,9 +51,9 @@ class _DryDockScreenState extends State<DryDockScreen> {
                     ),
                   )
                 : ListView.builder(
-                    itemCount: dockedShips.length,
+                    itemCount: dryDockShips.length,
                     itemBuilder: (context, index) {
-                      return ShipCard(ship: dockedShips[index]);
+                      return ShipCard(ship: dryDockShips[index]);
                     },
                   ),
           ),
@@ -85,12 +83,30 @@ class ShipCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(ship.nickname, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    Text("${ship.modelName} (${ship.shipClass})", style: TextStyle(color: Colors.grey[400])),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(ship.nickname, 
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (!isBusy)
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => _showRenameDialog(context, state, ship),
+                            ),
+                        ],
+                      ),
+                      Text("${ship.modelName} (${ship.shipClass})", style: TextStyle(color: Colors.grey[400])),
+                    ],
+                  ),
                 ),
                 _buildStatusChip(),
               ],
@@ -163,6 +179,42 @@ class ShipCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _showRenameDialog(BuildContext context, GameState state, Ship ship) {
+    final TextEditingController controller = TextEditingController(text: ship.nickname);
+    final int cost = ship.hasBeenRenamed ? 100 : 0;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Official Re-registration"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(labelText: "New Ship Name"),
+              maxLength: 20,
+            ),
+            const SizedBox(height: 8),
+            Text(cost == 0 ? "First rename is free." : "Registration fee: ⁂$cost Solars", 
+              style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: (cost > state.solars) ? null : () {
+              state.renameShip(ship.id, controller.text);
+              Navigator.pop(context);
+            },
+            child: const Text("REGISTER"),
+          ),
+        ],
       ),
     );
   }

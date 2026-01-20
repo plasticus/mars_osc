@@ -8,6 +8,7 @@ import 'screens/dry_dock_screen.dart';
 import 'screens/mission_board_screen.dart';
 import 'screens/operations_screen.dart';
 import 'screens/mission_logs_screen.dart';
+import 'screens/engineering_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,8 +18,6 @@ void main() async {
   );
 
   runApp(
-    // Added intl package might be needed for DateFormat in MissionLogsScreen
-    // User might need to run 'flutter pub add intl' if not already present
     ChangeNotifierProvider(
       create: (context) => GameState(),
       child: const MyApp(),
@@ -70,7 +69,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const OperationsScreen(),
       const DryDockScreen(),
       const MissionBoardScreen(),
-      const PlaceholderScreen(title: 'Engineering'),
+      const EngineeringScreen(),
       const MissionLogsScreen(),
     ];
 
