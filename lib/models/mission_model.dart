@@ -8,7 +8,10 @@ class Mission {
   final int minShieldLevel;
   final int minCargo;
   
-  final int rewardSolars;
+  final int rewardSolars; // Direct cash payment (Delivery contracts)
+  final String? rewardResource; // "Ore", "Gas", "Crystals" (Mining/Harvesting)
+  final int rewardResourceAmount; 
+
   final int baseDurationMinutes;
 
   Mission({
@@ -20,6 +23,8 @@ class Mission {
     required this.minShieldLevel,
     required this.minCargo,
     required this.rewardSolars,
+    this.rewardResource,
+    this.rewardResourceAmount = 0,
     required this.baseDurationMinutes,
   });
 

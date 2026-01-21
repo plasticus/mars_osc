@@ -47,6 +47,11 @@ class LogEntry {
 class GameState extends ChangeNotifier {
   int solars = 50000;
   String companyName = "New MOSC Branch";
+  
+  // Resource Inventory
+  int ore = 0;
+  int gas = 0;
+  int crystals = 0;
 
   // Base Upgrade Levels
   int hangarLevel = 1;
@@ -101,6 +106,10 @@ class GameState extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       
       await prefs.setInt('solars', solars);
+      await prefs.setInt('ore', ore);
+      await prefs.setInt('gas', gas);
+      await prefs.setInt('crystals', crystals);
+
       await prefs.setInt('hangarLevel', hangarLevel);
       await prefs.setInt('relayLevel', relayLevel);
       await prefs.setInt('serverFarmLevel', serverFarmLevel);
@@ -124,6 +133,10 @@ class GameState extends ChangeNotifier {
       if (!prefs.containsKey('solars')) return;
 
       solars = prefs.getInt('solars') ?? 50000;
+      ore = prefs.getInt('ore') ?? 0;
+      gas = prefs.getInt('gas') ?? 0;
+      crystals = prefs.getInt('crystals') ?? 0;
+
       hangarLevel = prefs.getInt('hangarLevel') ?? 1;
       relayLevel = prefs.getInt('relayLevel') ?? 1;
       serverFarmLevel = prefs.getInt('serverFarmLevel') ?? 0;
@@ -151,6 +164,9 @@ class GameState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     solars = 50000;
+    ore = 0;
+    gas = 0;
+    crystals = 0;
     hangarLevel = 1;
     relayLevel = 1;
     serverFarmLevel = 0;
@@ -271,7 +287,10 @@ class GameState extends ChangeNotifier {
       final now = DateTime.now();
       fleet[shipIndex].missionStartTime = now;
       fleet[shipIndex].missionEndTime = now.add(const Duration(minutes: 1));
+      
       fleet[shipIndex].pendingReward = mission.rewardSolars;
+      fleet[shipIndex].pendingResource = mission.rewardResource;
+      fleet[shipIndex].pendingResourceAmount = mission.rewardResourceAmount;
 
       availableMissions.removeWhere((m) => m.id == mission.id);
       
@@ -296,24 +315,89 @@ class GameState extends ChangeNotifier {
 
   void _processMissionCompletion(Ship ship) {
     int reward = ship.pendingReward;
-    solars += reward;
+    String? resource = ship.pendingResource;
+    int amount = ship.pendingResourceAmount;
     
+    // Add rewards
+    solars += reward;
+    if (resource != null && amount > 0) {
+      if (resource == 'Ore') ore += amount;
+      if (resource == 'Gas') gas += amount;
+      if (resource == 'Crystals') crystals += amount;
+    }
+    
+    // Apply Hull Wear
     double wear = (Random().nextInt(4) + 1) / 100.0; 
     double oldCondition = ship.condition;
     ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
     double actualWear = (oldCondition - ship.condition) * 100;
 
+    // Log Logic
+    String earnings = "";
+    if (reward > 0) earnings += "⁂$reward";
+    if (resource != null && amount > 0) {
+      if (earnings.isNotEmpty) earnings += " + ";
+      earnings += "$amount $resource";
+    }
+
     missionLogs.insert(0, LogEntry(
       timestamp: DateTime.now(),
       title: "Mission Return: ${ship.nickname}",
-      details: "Earnings: ⁂$reward. Hull Wear: -${actualWear.toStringAsFixed(1)}%.",
+      details: "Earnings: $earnings. Hull Wear: -${actualWear.toStringAsFixed(1)}%.",
       solarChange: reward,
       isPositive: true,
     ));
 
+    // Clear Pending
     ship.pendingReward = 0;
+    ship.pendingResource = null;
+    ship.pendingResourceAmount = 0;
     ship.missionStartTime = null;
     ship.missionEndTime = null;
+  }
+  
+  // Market Logic
+  int getResourcePrice(String resource) {
+    final now = DateTime.now().minute;
+    double variance = 1.0 + (sin(now / 10) * 0.2); // +/- 20%
+    
+    switch(resource) {
+      case 'Ore': return (10 * variance).toInt();
+      case 'Gas': return (25 * variance).toInt();
+      case 'Crystals': return (100 * variance).toInt();
+      default: return 0;
+    }
+  }
+
+  void sellResource(String resource, int amount) {
+    if (amount <= 0) return;
+    
+    int price = getResourcePrice(resource);
+    int total = price * amount;
+    
+    bool sold = false;
+    if (resource == 'Ore' && ore >= amount) {
+      ore -= amount;
+      sold = true;
+    } else if (resource == 'Gas' && gas >= amount) {
+      gas -= amount;
+      sold = true;
+    } else if (resource == 'Crystals' && crystals >= amount) {
+      crystals -= amount;
+      sold = true;
+    }
+    
+    if (sold) {
+      solars += total;
+      missionLogs.insert(0, LogEntry(
+        timestamp: DateTime.now(),
+        title: "Market Transaction",
+        details: "Sold $amount units of $resource for ⁂$total.",
+        solarChange: total,
+        isPositive: true,
+      ));
+      _triggerUpdate();
+    }
   }
 
   Duration getRepairDuration(Ship ship) {

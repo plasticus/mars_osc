@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_state.dart';
+import 'trade_depot_screen.dart';
 
 class EngineeringScreen extends StatelessWidget {
   const EngineeringScreen({super.key});
@@ -38,6 +39,18 @@ class EngineeringScreen extends StatelessWidget {
           onUpgrade: (cost) => state.upgradeBase('Relay', cost),
         ),
         _UpgradeCard(
+          title: "Broadcasting Array",
+          icon: Icons.radar,
+          currentLevel: state.broadcastingArrayLevel,
+          maxLevel: 4,
+          upgrades: {
+            2: _BaseUpgradeData(7500, "10 Active Contracts available"),
+            3: _BaseUpgradeData(25000, "20 Active Contracts available"),
+            4: _BaseUpgradeData(60000, "40 Active Contracts available"),
+          },
+          onUpgrade: (cost) => state.upgradeBase('Broadcasting', cost),
+        ),
+        _UpgradeCard(
           title: "Neural Server Farm",
           icon: Icons.memory,
           currentLevel: state.serverFarmLevel,
@@ -60,6 +73,10 @@ class EngineeringScreen extends StatelessWidget {
             3: _BaseUpgradeData(90000, "Holding Silos unlocked (Manual hold/sell)"),
           },
           onUpgrade: (cost) => state.upgradeBase('Depot', cost),
+          onOpen: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeDepotScreen()));
+          },
+          openLabel: "ENTER DEPOT",
         ),
         _UpgradeCard(
           title: "Repair Gantry",
@@ -91,6 +108,8 @@ class _UpgradeCard extends StatelessWidget {
   final int maxLevel;
   final Map<int, _BaseUpgradeData> upgrades;
   final Function(int) onUpgrade;
+  final VoidCallback? onOpen;
+  final String? openLabel;
 
   const _UpgradeCard({
     required this.title,
@@ -99,6 +118,8 @@ class _UpgradeCard extends StatelessWidget {
     required this.maxLevel,
     required this.upgrades,
     required this.onUpgrade,
+    this.onOpen,
+    this.openLabel,
   });
 
   @override
@@ -126,6 +147,24 @@ class _UpgradeCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
+            
+            // OPEN BUTTON (If applicable)
+            if (onOpen != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onOpen,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(openLabel ?? "OPEN"),
+                  ),
+                ),
+              ),
+
             if (isMaxed)
               const Text("Systems fully operational.", style: TextStyle(color: Colors.greenAccent))
             else if (upgradeData != null) ...[

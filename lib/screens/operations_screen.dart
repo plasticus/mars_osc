@@ -66,11 +66,13 @@ class ShipSummaryCard extends StatelessWidget {
       stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
       builder: (context, snapshot) {
         final now = DateTime.now();
+        
+        // Safety check: if missionEndTime is null (completed), return empty
+        if (ship.missionEndTime == null) return const SizedBox.shrink();
+
+        // If completed but not yet processed by GameState loop
         if (now.isAfter(ship.missionEndTime!)) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text("READY TO COLLECT", style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-          );
+           return const SizedBox(height: 4, child: LinearProgressIndicator(color: Colors.greenAccent));
         }
 
         final totalDuration = ship.missionEndTime!.difference(ship.missionStartTime!);

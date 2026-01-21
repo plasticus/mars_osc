@@ -28,6 +28,9 @@ class Ship {
   String? currentTask; // 'Repairing', 'Upgrading'
 
   int pendingReward;
+  String? pendingResource; // 'Ore', 'Gas', 'Crystals'
+  int pendingResourceAmount;
+
   bool isRepairing;
   bool hasBeenRenamed;
 
@@ -54,6 +57,8 @@ class Ship {
     this.busyUntil,
     this.currentTask,
     this.pendingReward = 0,
+    this.pendingResource,
+    this.pendingResourceAmount = 0,
   });
 
   Map<String, dynamic> toJson() {
@@ -78,6 +83,8 @@ class Ship {
       'busyUntil': busyUntil?.toIso8601String(),
       'currentTask': currentTask,
       'pendingReward': pendingReward,
+      'pendingResource': pendingResource,
+      'pendingResourceAmount': pendingResourceAmount,
       'isRepairing': isRepairing,
       'hasBeenRenamed': hasBeenRenamed,
     };
@@ -105,6 +112,8 @@ class Ship {
       busyUntil: json['busyUntil'] != null ? DateTime.parse(json['busyUntil']) : null,
       currentTask: json['currentTask'],
       pendingReward: json['pendingReward'],
+      pendingResource: json['pendingResource'],
+      pendingResourceAmount: json['pendingResourceAmount'] ?? 0,
       isRepairing: json['isRepairing'] ?? false,
       hasBeenRenamed: json['hasBeenRenamed'] ?? false,
     );
