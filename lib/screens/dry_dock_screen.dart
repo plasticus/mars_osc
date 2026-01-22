@@ -154,7 +154,7 @@ class ShipCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}", 
+                            child: Text("${ship.isMaxed ? '[E] ' : ''}${ship.nickname}",
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),

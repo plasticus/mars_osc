@@ -101,20 +101,6 @@ class OperationsScreen extends StatelessWidget {
         ),
         
         // DEBUG / BETA BUTTON
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => state.debugCompleteAllMissions(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text("BETA: COMPLETE ALL"),
-            ),
-          ),
-        ),
       ],
     );
   }
