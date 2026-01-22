@@ -29,6 +29,9 @@ class _DryDockScreenState extends State<DryDockScreen> {
       classCounts[ship.shipClass] = (classCounts[ship.shipClass] ?? 0) + 1;
     }
 
+    // Explicit order for display
+    final shipClasses = ["Mule", "Sprinter", "Miner", "Tanker", "Harvester"];
+
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Column(
@@ -60,11 +63,11 @@ class _DryDockScreenState extends State<DryDockScreen> {
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: classCounts.entries.map((e) => 
+                children: shipClasses.map((className) => 
                   Column(
                     children: [
-                      Text("${e.value}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(e.key, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text("${classCounts[className] ?? 0}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(className, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                     ],
                   )
                 ).toList(),

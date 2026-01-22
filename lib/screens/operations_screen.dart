@@ -229,6 +229,10 @@ class ShipSummaryCard extends StatelessWidget {
     if (ship.missionEndTime != null) {
       return const Text("ON MISSION", style: TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold));
     }
+    if (ship.busyUntil != null) {
+      // Explicitly check for busy status (repairing/upgrading)
+      return Text(ship.currentTask!.toUpperCase(), style: const TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold));
+    }
     if (ship.condition < 0.3) {
       return const Text("CRITICAL", style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold));
     }
@@ -379,11 +383,11 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
 }
 
 class _DetailStat extends StatelessWidget {
+  final IconData icon;
   final String label;
   final dynamic value;
-  final IconData icon;
 
-  const _DetailStat({required this.label, required this.value, required this.icon});
+  const _DetailStat({required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {

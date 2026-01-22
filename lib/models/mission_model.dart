@@ -1,3 +1,5 @@
+import '../utils/game_formulas.dart';
+
 class Mission {
   final String id;
   final String title;
@@ -12,7 +14,7 @@ class Mission {
   final String? rewardResource; // "Ore", "Gas", "Crystals" (Mining/Harvesting)
   final int rewardResourceAmount; 
 
-  final int baseDurationMinutes;
+  final int baseDurationMinutes; // Deprecated/Legacy field, actual duration calculated at runtime
 
   Mission({
     required this.id,
@@ -31,7 +33,12 @@ class Mission {
   // This is the logic your Mission Board uses to enable/disable the Launch button
   String? getMissingRequirement(dynamic ship) {
     if (ship.shipClass != requiredClass) return "Needs $requiredClass class";
-    if ((ship.fuelCapacity * 10) < distanceAU) return "Insufficient Fuel Range";
+    
+    // Updated Range Gate Logic
+    if (!GameFormulas.canRunMission(distanceAU, ship.fuelCapacity, ship.aiLevel)) {
+      return "Insufficient Range (Fuel/AI)";
+    }
+
     if (ship.shieldLevel < minShieldLevel) return "Shields too weak";
     if (ship.cargoCapacity < minCargo) return "Cargo bay too small";
     if (ship.condition < 0.25) return "Ship requires repairs";

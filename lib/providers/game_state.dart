@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../models/ship_model.dart';
 import '../models/mission_model.dart';
 import '../services/mission_service.dart';
+import '../utils/game_formulas.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -72,7 +73,11 @@ class GameState extends ChangeNotifier {
   Timer? _marketTimer;
   bool _isInitialized = false;
 
+  // --- RESTORED MISSING VARIABLE ---
   static const double _timeScalingFactor = 0.54;
+  // ---------------------------------
+  
+  bool isBetaTiming = true;
 
   GameState() {
     _loadData().then((_) {
@@ -400,31 +405,15 @@ class GameState extends ChangeNotifier {
       fleet[shipIndex].missionStartTime = now;
       fleet[shipIndex].missionDistance = mission.distanceAU; 
       
-      // -- NEW DURATION LOGIC (SECONDS) --
-      // Base factor: 1920 seconds per (AU/Speed) [32 minutes]
-      // Beta factor: 0.015 [Roughly 30 seconds per unit]
-      double factor = 1920.0;
-      factor *= 0.015; // Beta: Super Fast
+      // Calculate duration using GameFormulas
+      Duration duration = GameFormulas.calculateMissionDuration(
+        distanceAU: mission.distanceAU,
+        speed: fleet[shipIndex].speed,
+        ai: fleet[shipIndex].aiLevel,
+        isBetaTiming: isBetaTiming,
+      );
       
-      int speed = fleet[shipIndex].speed;
-      if (speed < 1) speed = 1; 
-      
-      // AI Speed Bonus: -5% time per AI Level
-      int ai = fleet[shipIndex].aiLevel;
-      double aiMult = max(0.5, 1.0 - (ai * 0.05));
-      factor *= aiMult;
-
-      double rawSeconds = (mission.distanceAU / speed) * factor;
-      
-      // --- BETA CAP (SECONDS) ---
-      // Hard cap at 5 minutes (300 seconds)
-      if (rawSeconds > 300.0) rawSeconds = 300.0;
-      // ----------------
-      
-      int seconds = max(5, rawSeconds.toInt()); // Min 5 seconds
-      
-      fleet[shipIndex].missionEndTime = now.add(Duration(seconds: seconds));
-      // ------------------------
+      fleet[shipIndex].missionEndTime = now.add(duration);
       
       fleet[shipIndex].pendingReward = mission.rewardSolars;
       fleet[shipIndex].pendingResource = mission.rewardResource;
@@ -441,7 +430,7 @@ class GameState extends ChangeNotifier {
       missionLogs.insert(0, LogEntry(
         timestamp: now,
         title: "Mission Launched",
-        details: "${fleet[shipIndex].nickname} sent to ${mission.title}. ETA: ${seconds}s",
+        details: "${fleet[shipIndex].nickname} sent to ${mission.title}. ETA: ${duration.inSeconds}s",
       ));
       
       _triggerUpdate();

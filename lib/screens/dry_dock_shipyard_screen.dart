@@ -10,7 +10,7 @@ class DryDockShipyardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
-    final shipClasses = ["Mule", "Sprinter", "Tanker", "Miner", "Harvester"];
+    final shipClasses = ["Mule", "Sprinter", "Miner", "Tanker", "Harvester"];
 
     return DefaultTabController(
       length: shipClasses.length,
