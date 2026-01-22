@@ -370,7 +370,7 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Confirm Decommission"),
-        content: Text("Are you sure you want to sell ${ship.nickname}? You will receive ⁂ ${state.getShipSaleValue(ship)}."),
+        content: Text("Are you sure you want to sell ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}? You will receive ⁂ ${state.getShipSaleValue(ship)}."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           TextButton(

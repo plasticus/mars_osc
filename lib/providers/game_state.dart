@@ -526,7 +526,7 @@ class GameState extends ChangeNotifier {
 
     missionLogs.insert(0, LogEntry(
       timestamp: DateTime.now(),
-      title: "Mission Return: ${ship.nickname}",
+      title: "Mission Return: ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
       details: "Earnings: $earnings. Hull Wear: -${actualWear.toStringAsFixed(2)}%.",
       solarChange: reward + overflowIncome + eliteBonus,
       isPositive: true,

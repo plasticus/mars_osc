@@ -154,7 +154,7 @@ class ShipCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(ship.nickname, 
+                            child: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}", 
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -265,7 +265,7 @@ class ShipCard extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Confirm Sale"),
-        content: Text("Are you sure you want to sell ${ship.nickname}? You will receive ⁂ ${state.getShipSaleValue(ship)}."),
+        content: Text("Are you sure you want to sell ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}? You will receive ⁂ ${state.getShipSaleValue(ship)}."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           TextButton(

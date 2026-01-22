@@ -297,7 +297,7 @@ class MissionCard extends StatelessWidget {
                       enabled: error == null && !isBusy,
                       leading: Icon(Icons.rocket_launch,
                           color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]),
-                      title: Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}", style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(error ?? (isBusy ? "System Busy" : "Flight Ready"),
                         style: TextStyle(color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent, fontSize: 12)),
                       trailing: (error == null && !isBusy)
@@ -306,7 +306,7 @@ class MissionCard extends StatelessWidget {
                           state.startMission(ship.id, mission);
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("${ship.nickname} is away.")),
+                            SnackBar(content: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} is away.")),
                           );
                         },
                         child: const Text("LAUNCH"),
