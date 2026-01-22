@@ -49,6 +49,7 @@ class LogEntry {
 class GameState extends ChangeNotifier {
   int solars = 50000;
   String companyName = "New MOSC Branch";
+  bool hasNamedCompany = false;
 
   // Resource Inventory
   int ore = 0;
@@ -62,6 +63,7 @@ class GameState extends ChangeNotifier {
   int tradeDepotLevel = 1;
   int repairGantryLevel = 0;
   int broadcastingArrayLevel = 1;
+
 
   int get scanArrayLevel => relayLevel;
 
@@ -129,6 +131,7 @@ class GameState extends ChangeNotifier {
       await prefs.setInt('tradeDepotLevel', tradeDepotLevel);
       await prefs.setInt('repairGantryLevel', repairGantryLevel);
       await prefs.setInt('broadcastingArrayLevel', broadcastingArrayLevel);
+      await prefs.setBool('hasNamedCompany', hasNamedCompany);
 
       final fleetJson = jsonEncode(fleet.map((s) => s.toJson()).toList());
       await prefs.setString('fleet', fleetJson);
@@ -158,6 +161,7 @@ class GameState extends ChangeNotifier {
 
       repairGantryLevel = prefs.getInt('repairGantryLevel') ?? 0;
       broadcastingArrayLevel = prefs.getInt('broadcastingArrayLevel') ?? 1;
+      hasNamedCompany = prefs.getBool('hasNamedCompany') ?? false;
 
       final fleetString = prefs.getString('fleet');
       if (fleetString != null) {
@@ -188,6 +192,7 @@ class GameState extends ChangeNotifier {
     tradeDepotLevel = 1;
     repairGantryLevel = 0;
     broadcastingArrayLevel = 1;
+    hasNamedCompany = false;
     fleet = [];
     missionLogs = [];
     _isInitialized = false;
@@ -846,6 +851,12 @@ class GameState extends ChangeNotifier {
 
   void generateNewMissions() {
     updateMissions(_missionService.generateMissions(relayLevel, broadcastingArrayLevel, fleet));
+  }
+
+  void setInitialCompanyName(String name) {
+    companyName = name;
+    hasNamedCompany = true;
+    _triggerUpdate(); // This saves the data and updates the UI
   }
 
   @override

@@ -48,12 +48,12 @@ class MissionService {
       title: "Belt Skimming (Miner)",
       description: "A quick hop to the nearest carbonaceous asteroids for surface ore.",
       requiredClass: "Miner",
-      distanceAU: 1.5, // Just outside Mars' immediate gravity well
+      distanceAU: 1.5,
       minShieldLevel: 0,
       minCargo: 1,
       rewardSolars: 0,
       rewardResource: 'Ore',
-      rewardResourceAmount: 8, // Slightly bumped for the extra distance
+      rewardResourceAmount: 8,
       baseDurationMinutes: 0,
     );
   }
@@ -95,12 +95,10 @@ class MissionService {
     int missionsPerCategory = broadcastingLevel * 2;
     List<String> allCategories = ['Mule', 'Sprinter', 'Miner', 'Tanker', 'Harvester'];
 
-    // 1. Generate missions tailored to the user's current ships
     for (var ship in fleet) {
       newMissions.add(_generateMissionForShip(ship, relayLevel));
     }
 
-    // 2. Generate standard missions for each category
     for (String category in allCategories) {
       if (category == 'Miner' && relayLevel < 2) continue;
       if (category == 'Tanker' && relayLevel < 3) continue;
@@ -108,7 +106,7 @@ class MissionService {
 
       for (int i = 0; i < missionsPerCategory; i++) {
         double distance = double.parse(_getRandomDistance(category).toStringAsFixed(2));
-        int minShield = _random.nextInt(relayLevel + 1); 
+        int minShield = _random.nextInt(relayLevel + 1);
         int minCargo = _generateCargoRequirement(category, relayLevel);
         var rewards = _calculateRewards(category, distance, minCargo);
 
@@ -123,19 +121,17 @@ class MissionService {
           rewardSolars: rewards['solars'] as int,
           rewardResource: rewards['resource'] as String?,
           rewardResourceAmount: rewards['amount'] as int,
-          baseDurationMinutes: 0, // Calculated at launch based on speed
+          baseDurationMinutes: 0,
         ));
       }
     }
 
-// Ensure low-level missions always exist for every unlocked class
     if (!newMissions.any((m) => m.title.contains("Local Scrap Run"))) {
       newMissions.add(getLocalScrapRun());
     }
     if (!newMissions.any((m) => m.title.contains("Local Courier Run"))) {
       newMissions.add(getLocalCourierRun());
     }
-// Class-Gated Locals
     if (relayLevel >= 2 && !newMissions.any((m) => m.title.contains("Belt Skimming"))) {
       newMissions.add(getLocalMiningRun());
     }
@@ -150,16 +146,10 @@ class MissionService {
   }
 
   Mission _generateMissionForShip(Ship ship, int relayLevel) {
-    // Tailored Logic: Push limits of the ship
     double maxRange = GameFormulas.getMaxDistanceAU(ship.fuelCapacity, ship.aiLevel);
-    
-    // Target 70-95% of max range, or random class distance if it fits
     double rangeTarget = maxRange * (0.7 + (_random.nextDouble() * 0.25));
     double distance = double.parse(rangeTarget.toStringAsFixed(2));
-
-    // Target 70-100% of Cargo
     int cargoTarget = (ship.cargoCapacity * (0.7 + (_random.nextDouble() * 0.3))).ceil();
-    // Ensure at least 1
     cargoTarget = max(1, cargoTarget);
 
     var rewards = _calculateRewards(ship.shipClass, distance, cargoTarget);
@@ -170,22 +160,20 @@ class MissionService {
       description: _getRandomFlavorText(ship.shipClass),
       requiredClass: ship.shipClass,
       distanceAU: distance,
-      minShieldLevel: ship.shieldLevel, // Exact match
+      minShieldLevel: ship.shieldLevel,
       minCargo: cargoTarget,
       rewardSolars: rewards['solars'] as int,
       rewardResource: rewards['resource'] as String?,
       rewardResourceAmount: rewards['amount'] as int,
-      baseDurationMinutes: 0, // Calculated at launch
+      baseDurationMinutes: 0,
     );
   }
 
   Map<String, dynamic> _calculateRewards(String shipClass, double distance, int cargoLoad) {
-    // Base Calculation
     int value = (distance * 100).toInt() + (cargoLoad * 20);
     int variance = _random.nextInt(50);
     int baseTotal = value + variance;
 
-    // Class Multipliers
     double multiplier = 1.0;
     switch(shipClass) {
       case 'Mule': multiplier = 1.0; break;
@@ -201,19 +189,19 @@ class MissionService {
       return {
         'solars': 0,
         'resource': 'Ore',
-        'amount': max(5, (totalValue / 10).toInt()), // Ore ~10 Solars
+        'amount': max(5, (totalValue / 10).toInt()),
       };
     } else if (shipClass == 'Tanker') {
       return {
         'solars': 0,
         'resource': 'Gas',
-        'amount': max(2, (totalValue / 25).toInt()), // Gas ~25 Solars
+        'amount': max(2, (totalValue / 25).toInt()),
       };
     } else if (shipClass == 'Harvester') {
       return {
         'solars': 0,
         'resource': 'Crystals',
-        'amount': max(1, (totalValue / 100).toInt()), // Crystals ~100 Solars
+        'amount': max(1, (totalValue / 100).toInt()),
       };
     }
 
@@ -222,15 +210,6 @@ class MissionService {
       'resource': null,
       'amount': 0,
     };
-  }
-
-  String _getDescription(String shipClass) {
-    switch (shipClass) {
-      case 'Miner': return "Asteroid belt mining operation.";
-      case 'Tanker': return "Nebula gas siphon run.";
-      case 'Harvester': return "Deep rift anomaly harvest.";
-      default: return "Standard cargo delivery contract.";
-    }
   }
 
   double _getRandomDistance(String shipClass) {
@@ -244,7 +223,7 @@ class MissionService {
 
     switch (shipClass) {
       case 'Mule':
-        variance = 5 + (techLevel * 3); 
+        variance = 5 + (techLevel * 3);
         break;
       case 'Sprinter':
         variance = 2 + techLevel;
@@ -263,97 +242,98 @@ class MissionService {
     }
     return min(20, base + _random.nextInt(variance));
   }
-}
 
-String _getRandomFlavorText(String shipClass) {
-  final Map<String, List<String>> flavorTexts = {
-    'Mule': [
-      "Local station needs a bulk shipment of bio-paste. Heavy but safe.",
-      "Relocating surplus machinery from the lower docks.",
-      "The habitat rings are low on water recyclers. Routine haul.",
-      "Contractor failed to show. We need this scrap moved yesterday.",
-      "Standard industrial freight. Keep it steady, trucker.",
-      "A hydroponics bay is moving its soil beds. Dirty work, but it pays.",
-      "Construction materials for the new transit hub. Don't scratch the plating.",
-      "A batch of low-grade hull plating needs to go to the scrapyard.",
-      "Transporting a shipment of 'Grade-B' luxury textiles. It's mostly just rugs.",
-      "Moving crates of generic spare parts to the outer rim depot.",
-      "The cafeteria is out of synth-coffee. This is a true emergency.",
-      "Bulk delivery of insulation foam for the new radiation shielding.",
-      "Moving a decommissioned engine block for museum display.",
-      "Hauling a load of recycled plastics to the 3D-printing labs.",
-      "Standard logistics loop: dropping off basic supplies at the mining camp.",
-    ],
-    'Sprinter': [
-      "Urgent medical data drive needs to reach the inner moon. High priority.",
-      "A high-ranking official forgot their credentials. Speed is key.",
-      "Time-sensitive repair parts for the oxygen scrubbers.",
-      "Courier request: Confidential diplomatic pouch. Don't ask, just fly.",
-      "Emergency relay node deployment. The network is down until you arrive.",
-      "Last-minute organ transport for a critical surgery on the science vessel.",
-      "A lawyer needs to serve a subpoena before the ship docks. Burn those thrusters.",
-      "Delivering a 'hot-fix' patch for a station's failing security grid.",
-      "Fresh isotopes with a very short half-life. Don't dawdle.",
-      "Someone left their lucky charm on the last station. Excessive pay for a silly task.",
-      "Overdue library books. The fines are reaching astronomical levels.",
-      "Delivering fresh sushi to the Governor’s yacht. Must arrive cold.",
-      "High-speed intercept: A departing freighter forgot its flight manifest.",
-      "Urgent press release for the Martian News Network. Breaking news!",
-      "Transporting a specialized decryption key for a locked cargo container.",
-    ],
-    'Miner': [
-      "Scanners picked up a high-density iron deposit in the nearby belt.",
-      "The forge is hungry. Bring back a full load of raw silicates.",
-      "A local conglomerate is offloading mining rights to a small debris field.",
-      "Surface-level hematite detected. Perfect for a quick extraction.",
-      "Small-scale rock-breaking contract. Low risk, steady ore.",
-      "An old surveyor's map suggests a vein of copper in a forgotten sector.",
-      "The local foundry is running low on fluxing agents. Get some ore.",
-      "A rogue asteroid just entered the sector. Let's peel it before it leaves.",
-      "Deep-vein nickel deposits found in a stable cluster.",
-      "Mining drone broke down; finish the job and keep the remaining ore.",
-      "Clear a path through a small debris field and harvest the remains.",
-      "High-sulfur rock detected. Smells like money.",
-      "An independent prospector is selling their location data for a cut.",
-      "The station’s hull repair crew needs a fresh batch of raw magnesium.",
-      "Stripping a silicate-rich rock for base construction materials.",
-    ],
-    'Tanker': [
-      "A nearby freighter ran dry. Siphon some nebula gas and get it to them.",
-      "The fuel depot is nearing critical lows. We need a gas injection.",
-      "Trace amounts of Helium-3 detected in the local cloud. Go get it.",
-      "Station atmosphere needs nitrogen balancing. Standard siphon run.",
-      "Research vessel needs localized gas samples for their laboratory.",
-      "Argon harvesting for the station's neon lighting and plasma cutters.",
-      "Siphon a pocket of methane from a passing comet’s tail.",
-      "Collecting Xenon gas for a long-haul vessel's ion engines.",
-      "The localized nebula is particularly thick today. Easy picking.",
-      "A pressurized leak in Sector 4 left a gas cloud ripe for the taking.",
-      "Industrial cooling systems need a refill of ammonia gas.",
-      "The greenhouse needs a concentrated CO2 injection.",
-      "Harvesting traces of hydrogen from a low-density gas pocket.",
-      "A rogue gas pocket is interfering with comms; go clean it up.",
-      "Special request: High-purity oxygen for the station's medical wing.",
-    ],
-    'Harvester': [
-      "A minor rift anomaly just blinked onto the long-range scanners.",
-      "Deep-space energy signatures detected. Possible crystal formation.",
-      "The science division needs fresh data from the anomaly's edge.",
-      "Faint spectral readings detected. Harvest whatever hasn't stabilized yet.",
-      "Anomaly sweep: Looking for high-energy resonance crystals.",
-      "A distortion in space-time has left behind a trail of shimmering shards.",
-      "The rift is breathing today. Crystals are blooming in the gaps.",
-      "Unstable energy readings. Get in, grab the crystals, and get out.",
-      "Harvesting 'memory crystals' from a stabilized rift pocket.",
-      "A high-energy anomaly is collapsing. This is the last chance for shards.",
-      "Trace amounts of exotic matter detected near a gravity well.",
-      "The rift's resonance frequency matches our crystal collectors. Go!",
-      "A 'ghost-signal' anomaly has left behind physical residue. Harvest it.",
-      "Deep-space rift cluster: High reward for those who dare the edge.",
-      "The anomaly is shedding its outer layer. Grab the flakes before they fade.",
-    ],
-  };
+  // FIXED: Moved this method INSIDE the class
+  String _getRandomFlavorText(String shipClass) {
+    final Map<String, List<String>> flavorTexts = {
+      'Mule': [
+        "Local station needs a bulk shipment of bio-paste. Heavy but safe.",
+        "Relocating surplus machinery from the lower docks.",
+        "The habitat rings are low on water recyclers. Routine haul.",
+        "Contractor failed to show. We need this scrap moved yesterday.",
+        "Standard industrial freight. Keep it steady, trucker.",
+        "A hydroponics bay is moving its soil beds. Dirty work, but it pays.",
+        "Construction materials for the new transit hub. Don't scratch the plating.",
+        "A batch of low-grade hull plating needs to go to the scrapyard.",
+        "Transporting a shipment of 'Grade-B' luxury textiles. It's mostly just rugs.",
+        "Moving crates of generic spare parts to the outer rim depot.",
+        "The cafeteria is out of synth-coffee. This is a true emergency.",
+        "Bulk delivery of insulation foam for the new radiation shielding.",
+        "Moving a decommissioned engine block for museum display.",
+        "Hauling a load of recycled plastics to the 3D-printing labs.",
+        "Standard logistics loop: dropping off basic supplies at the mining camp.",
+      ],
+      'Sprinter': [
+        "Urgent medical data drive needs to reach the inner moon. High priority.",
+        "A high-ranking official forgot their credentials. Speed is key.",
+        "Time-sensitive repair parts for the oxygen scrubbers.",
+        "Courier request: Confidential diplomatic pouch. Don't ask, just fly.",
+        "Emergency relay node deployment. The network is down until you arrive.",
+        "Last-minute organ transport for a critical surgery on the science vessel.",
+        "A lawyer needs to serve a subpoena before the ship docks. Burn those thrusters.",
+        "Delivering a 'hot-fix' patch for a station's failing security grid.",
+        "Fresh isotopes with a very short half-life. Don't dawdle.",
+        "Someone left their lucky charm on the last station. Excessive pay for a silly task.",
+        "Overdue library books. The fines are reaching astronomical levels.",
+        "Delivering fresh sushi to the Governor’s yacht. Must arrive cold.",
+        "High-speed intercept: A departing freighter forgot its flight manifest.",
+        "Urgent press release for the Martian News Network. Breaking news!",
+        "Transporting a specialized decryption key for a locked cargo container.",
+      ],
+      'Miner': [
+        "Scanners picked up a high-density iron deposit in the nearby belt.",
+        "The forge is hungry. Bring back a full load of raw silicates.",
+        "A local conglomerate is offloading mining rights to a small debris field.",
+        "Surface-level hematite detected. Perfect for a quick extraction.",
+        "Small-scale rock-breaking contract. Low risk, steady ore.",
+        "An old surveyor's map suggests a vein of copper in a forgotten sector.",
+        "The local foundry is running low on fluxing agents. Get some ore.",
+        "A rogue asteroid just entered the sector. Let's peel it before it leaves.",
+        "Deep-vein nickel deposits found in a stable cluster.",
+        "Mining drone broke down; finish the job and keep the remaining ore.",
+        "Clear a path through a small debris field and harvest the remains.",
+        "High-sulfur rock detected. Smells like money.",
+        "An independent prospector is selling their location data for a cut.",
+        "The station’s hull repair crew needs a fresh batch of raw magnesium.",
+        "Stripping a silicate-rich rock for base construction materials.",
+      ],
+      'Tanker': [
+        "A nearby freighter ran dry. Siphon some nebula gas and get it to them.",
+        "The fuel depot is nearing critical lows. We need a gas injection.",
+        "Trace amounts of Helium-3 detected in the local cloud. Go get it.",
+        "Station atmosphere needs nitrogen balancing. Standard siphon run.",
+        "Research vessel needs localized gas samples for their laboratory.",
+        "Argon harvesting for the station's neon lighting and plasma cutters.",
+        "Siphon a pocket of methane from a passing comet’s tail.",
+        "Collecting Xenon gas for a long-haul vessel's ion engines.",
+        "The localized nebula is particularly thick today. Easy picking.",
+        "A pressurized leak in Sector 4 left a gas cloud ripe for the taking.",
+        "Industrial cooling systems need a refill of ammonia gas.",
+        "The greenhouse needs a concentrated CO2 injection.",
+        "Harvesting traces of hydrogen from a low-density gas pocket.",
+        "A rogue gas pocket is interfering with comms; go clean it up.",
+        "Special request: High-purity oxygen for the station's medical wing.",
+      ],
+      'Harvester': [
+        "A minor rift anomaly just blinked onto the long-range scanners.",
+        "Deep-space energy signatures detected. Possible crystal formation.",
+        "The science division needs fresh data from the anomaly's edge.",
+        "Faint spectral readings detected. Harvest whatever hasn't stabilized yet.",
+        "Anomaly sweep: Looking for high-energy resonance crystals.",
+        "A distortion in space-time has left behind a trail of shimmering shards.",
+        "The rift is breathing today. Crystals are blooming in the gaps.",
+        "Unstable energy readings. Get in, grab the crystals, and get out.",
+        "Harvesting 'memory crystals' from a stabilized rift pocket.",
+        "A high-energy anomaly is collapsing. This is the last chance for shards.",
+        "Trace amounts of exotic matter detected near a gravity well.",
+        "The rift's resonance frequency matches our crystal collectors. Go!",
+        "A 'ghost-signal' anomaly has left behind physical residue. Harvest it.",
+        "Deep-space rift cluster: High reward for those who dare the edge.",
+        "The anomaly is shedding its outer layer. Grab the flakes before they fade.",
+      ],
+    };
 
-  final texts = flavorTexts[shipClass] ?? ["Standard cargo delivery contract."];
-  return texts[_random.nextInt(texts.length)];
-}
+    final texts = flavorTexts[shipClass] ?? ["Standard cargo delivery contract."];
+    return texts[_random.nextInt(texts.length)];
+  }
+} // End of MissionService class
