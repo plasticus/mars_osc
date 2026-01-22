@@ -49,7 +49,7 @@ class LogEntry {
 class GameState extends ChangeNotifier {
   int solars = 50000;
   String companyName = "New MOSC Branch";
-  
+
   // Resource Inventory
   int ore = 0;
   int gas = 0;
@@ -57,9 +57,9 @@ class GameState extends ChangeNotifier {
 
   // Base Upgrade Levels
   int hangarLevel = 1;
-  int relayLevel = 1; 
+  int relayLevel = 1;
   int serverFarmLevel = 0;
-  int tradeDepotLevel = 1; 
+  int tradeDepotLevel = 1;
   int repairGantryLevel = 0;
   int broadcastingArrayLevel = 1;
 
@@ -68,14 +68,14 @@ class GameState extends ChangeNotifier {
   List<Ship> fleet = [];
   List<Mission> availableMissions = [];
   List<LogEntry> missionLogs = [];
-  
+
   final MissionService _missionService = MissionService();
   Timer? _gameTimer;
   Timer? _marketTimer;
   bool _isInitialized = false;
 
   static const double _timeScalingFactor = 0.54;
-  bool isBetaTiming = true; 
+  bool isBetaTiming = true;
 
   GameState() {
     _loadData().then((_) {
@@ -109,7 +109,7 @@ class GameState extends ChangeNotifier {
   Future<void> _saveData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       await prefs.setInt('solars', solars);
       await prefs.setInt('ore', ore);
       await prefs.setInt('gas', gas);
@@ -121,10 +121,10 @@ class GameState extends ChangeNotifier {
       await prefs.setInt('tradeDepotLevel', tradeDepotLevel);
       await prefs.setInt('repairGantryLevel', repairGantryLevel);
       await prefs.setInt('broadcastingArrayLevel', broadcastingArrayLevel);
-      
+
       final fleetJson = jsonEncode(fleet.map((s) => s.toJson()).toList());
       await prefs.setString('fleet', fleetJson);
-      
+
       final logsJson = jsonEncode(missionLogs.take(50).map((l) => l.toJson()).toList());
       await prefs.setString('missionLogs', logsJson);
     } catch (e) {
@@ -150,13 +150,13 @@ class GameState extends ChangeNotifier {
 
       repairGantryLevel = prefs.getInt('repairGantryLevel') ?? 0;
       broadcastingArrayLevel = prefs.getInt('broadcastingArrayLevel') ?? 1;
-      
+
       final fleetString = prefs.getString('fleet');
       if (fleetString != null) {
         final List<dynamic> decoded = jsonDecode(fleetString);
         fleet = decoded.map((item) => Ship.fromJson(item)).toList();
       }
-      
+
       final logsString = prefs.getString('missionLogs');
       if (logsString != null) {
         final List<dynamic> decoded = jsonDecode(logsString);
@@ -183,7 +183,7 @@ class GameState extends ChangeNotifier {
     fleet = [];
     missionLogs = [];
     _isInitialized = false;
-    
+
     fleet.add(Ship(
       id: "starter_001",
       nickname: "The Rusty Scow",
@@ -219,13 +219,12 @@ class GameState extends ChangeNotifier {
   }
 
   int get maxStorage {
-    // Base 500, +500 per level
-    return tradeDepotLevel * 500; 
+    return tradeDepotLevel * 500;
   }
 
   bool isClassUnlocked(String shipClass) {
     if (shipClass == 'Mule' || shipClass == 'Sprinter') return true;
-    if (shipClass == 'Miner') return relayLevel >= 2; 
+    if (shipClass == 'Miner') return relayLevel >= 2;
     if (shipClass == 'Tanker') return relayLevel >= 3;
     if (shipClass == 'Harvester') return relayLevel >= 4;
     return false;
@@ -260,7 +259,7 @@ class GameState extends ChangeNotifier {
           _processMissionCompletion(ship);
           changesMade = true;
         }
-        
+
         if (ship.busyUntil != null && now.isAfter(ship.busyUntil!)) {
           _processMaintenanceCompletion(ship);
           changesMade = true;
@@ -276,10 +275,8 @@ class GameState extends ChangeNotifier {
 
   void _startMarketLoop() {
     _marketTimer?.cancel();
-    // In Beta Mode: 1 minute = 1 hour.
-    // In Real Mode: 60 minutes = 1 hour.
-    const duration = Duration(minutes: 1); 
-    
+    const duration = Duration(minutes: 1);
+
     _marketTimer = Timer.periodic(duration, (timer) {
       if (ore > 0 || gas > 0 || crystals > 0) {
         _performAutoSell();
@@ -291,9 +288,8 @@ class GameState extends ChangeNotifier {
 
   void _performAutoSell() {
     Random rng = Random();
-    // Sell a random chunk (e.g., 5% to 10% of current stock)
-    double percent = 0.05 + (rng.nextDouble() * 0.05); 
-    
+    double percent = 0.05 + (rng.nextDouble() * 0.05);
+
     int soldOre = (ore * percent).ceil();
     int soldGas = (gas * percent).ceil();
     int soldCrystals = (crystals * percent).ceil();
@@ -302,7 +298,6 @@ class GameState extends ChangeNotifier {
     if (soldGas == 0 && gas > 0) soldGas = 1;
     if (soldCrystals == 0 && crystals > 0) soldCrystals = 1;
 
-    // AI Price Bonus: Base 1.05 + 0.05 per level above 1
     double multiplier = 1.0 + (tradeDepotLevel * 0.05);
 
     int revenue = 0;
@@ -344,7 +339,7 @@ class GameState extends ChangeNotifier {
     gas = 0;
     crystals = 0;
     solars += revenue;
-    
+
     _triggerUpdate();
   }
 
@@ -353,17 +348,15 @@ class GameState extends ChangeNotifier {
     final now = DateTime.now();
     for (var ship in fleet) {
       if (ship.missionEndTime != null) {
-        // Set to now, loop will catch it
         ship.missionEndTime = now;
         updated = true;
       }
       if (ship.busyUntil != null) {
-        // Also finish repairs/upgrades instantly
         ship.busyUntil = now;
         updated = true;
       }
     }
-    
+
     if (updated) {
       missionLogs.insert(0, LogEntry(
         timestamp: DateTime.now(),
@@ -399,44 +392,35 @@ class GameState extends ChangeNotifier {
     if (shipIndex != -1) {
       final now = DateTime.now();
       fleet[shipIndex].missionStartTime = now;
-      fleet[shipIndex].missionDistance = mission.distanceAU; 
-      
-      // -- NEW DURATION LOGIC (SECONDS) --
-      // Base factor: 1920 seconds per (AU/Speed) [32 minutes]
-      // Beta factor: 0.015 [Roughly 30 seconds per unit]
+      fleet[shipIndex].missionDistance = mission.distanceAU;
+
       double factor = 1920.0;
-      factor *= 0.015; // Beta: Super Fast
-      
+      factor *= 0.015;
+
       int speed = fleet[shipIndex].speed;
-      if (speed < 1) speed = 1; 
-      
-      // AI Speed Bonus: -5% time per AI Level
+      if (speed < 1) speed = 1;
+
       int ai = fleet[shipIndex].aiLevel;
       double aiMult = max(0.5, 1.0 - (ai * 0.05));
       factor *= aiMult;
 
       double rawSeconds = (mission.distanceAU / speed) * factor;
-      
-      // --- BETA CAP (SECONDS) ---
-      // Hard cap at 5 minutes (300 seconds)
       if (rawSeconds > 300.0) rawSeconds = 300.0;
-      // ----------------
-      
-      int seconds = max(5, rawSeconds.toInt()); // Min 5 seconds
-      
+
+      int seconds = max(5, rawSeconds.toInt());
+
       fleet[shipIndex].missionEndTime = now.add(Duration(seconds: seconds));
-      // ------------------------
-      
+
       fleet[shipIndex].pendingReward = mission.rewardSolars;
       fleet[shipIndex].pendingResource = mission.rewardResource;
       fleet[shipIndex].pendingResourceAmount = mission.rewardResourceAmount;
 
       availableMissions.removeWhere((m) => m.id == mission.id);
-      
+
       if (mission.title.contains("Local Scrap Run")) {
-         availableMissions.add(_missionService.getLocalScrapRun());
+        availableMissions.add(_missionService.getLocalScrapRun());
       } else if (mission.title.contains("Local Courier Run")) {
-         availableMissions.add(_missionService.getLocalCourierRun());
+        availableMissions.add(_missionService.getLocalCourierRun());
       }
 
       missionLogs.insert(0, LogEntry(
@@ -444,7 +428,7 @@ class GameState extends ChangeNotifier {
         title: "Mission Launched",
         details: "${fleet[shipIndex].nickname} sent to ${mission.title}. ETA: ${seconds}s",
       ));
-      
+
       _triggerUpdate();
     }
   }
@@ -460,32 +444,26 @@ class GameState extends ChangeNotifier {
     amount = (amount * aiRewardMult).toInt();
 
     // --- BETA TESTING SWITCH ---
-    // REMOVE THIS BLOCK BEFORE RELEASE
     reward *= 10;
     amount *= 10;
-    // ---------------------------
-    
+
     // Calculate Base Total Value for Elite Bonus
     int baseTotalValue = reward;
     if (resource != null && amount > 0) {
       baseTotalValue += (amount * getResourcePrice(resource));
     }
 
-    // --- ELITE BONUS ---
+    // --- ELITE BONUS (5% mastery dividend) ---
     int eliteBonus = 0;
     if (ship.isMaxed) {
       eliteBonus = (baseTotalValue * 0.05).toInt();
-      // "Bonus is paid out in Solars for ALL classes"
-      // Note: baseTotalValue already includes the 10x beta multiplier and AI bonus, so elite bonus scales with them.
     }
-    
-    // Add rewards (Cash)
-    solars += reward;
-    solars += eliteBonus;
-    
+
+    solars += reward + eliteBonus;
+
     String earnings = "";
     if (reward > 0) earnings += "⁂$reward";
-    
+
     if (eliteBonus > 0) {
       if (earnings.isNotEmpty) earnings += " + ";
       earnings += "⁂$eliteBonus (Elite)";
@@ -515,38 +493,33 @@ class GameState extends ChangeNotifier {
       earnings += "$toStore m³ $icon $resource";
 
       if (overflow > 0) {
-        // Instant Sell Overflow at 75% market
         int price = getResourcePrice(resource);
         int penaltyPrice = (price * 0.75).toInt();
         int overflowVal = overflow * penaltyPrice;
         solars += overflowVal;
         overflowIncome = overflowVal;
-        
+
         int potentialVal = overflow * price;
         int lostVal = potentialVal - overflowVal;
-        
+
         earnings += "\n(⚠️ Storage Full: $overflow m³ $icon sold rushed. Lost potential ⁂$lostVal)";
       }
     }
-    
-    // --- NEW WEAR CALCULATION ---
+
     double dist = ship.missionDistance ?? 1.0;
-    double baseWearPercent = dist * 0.002; 
-    
-    // Mitigation
+    double baseWearPercent = dist * 0.002;
+
     double effectiveShield = ship.shieldLevel + (ship.aiLevel * 0.5);
-    double mitigation = min(0.5, effectiveShield * 0.02); 
-    
+    double mitigation = min(0.5, effectiveShield * 0.02);
+
     double wearPercent = baseWearPercent * (1.0 - mitigation);
-    
-    // Floor
+
     double floor = dist * 0.0005;
     if (wearPercent < floor) wearPercent = floor;
-    
-    // Variance
+
     double variance = 0.8 + (Random().nextDouble() * 0.4);
     wearPercent *= variance;
-    
+
     double oldCondition = ship.condition;
     ship.condition = (ship.condition - wearPercent).clamp(0.0, 1.0);
     double actualWear = (oldCondition - ship.condition) * 100;
@@ -559,7 +532,6 @@ class GameState extends ChangeNotifier {
       isPositive: true,
     ));
 
-    // Clear Pending
     ship.pendingReward = 0;
     ship.pendingResource = null;
     ship.pendingResourceAmount = 0;
@@ -567,12 +539,11 @@ class GameState extends ChangeNotifier {
     ship.missionEndTime = null;
     ship.missionDistance = null;
   }
-  
-  // Market Logic
+
   int getResourcePrice(String resource) {
     final now = DateTime.now().minute;
-    double variance = 1.0 + (sin(now / 10) * 0.2); // +/- 20%
-    
+    double variance = 1.0 + (sin(now / 10) * 0.2);
+
     switch(resource) {
       case 'Ore': return (10 * variance).toInt();
       case 'Gas': return (25 * variance).toInt();
@@ -583,10 +554,10 @@ class GameState extends ChangeNotifier {
 
   void sellResource(String resource, int amount) {
     if (amount <= 0) return;
-    
+
     int price = getResourcePrice(resource);
     int total = price * amount;
-    
+
     bool sold = false;
     if (resource == 'Ore' && ore >= amount) {
       ore -= amount;
@@ -598,7 +569,7 @@ class GameState extends ChangeNotifier {
       crystals -= amount;
       sold = true;
     }
-    
+
     if (sold) {
       solars += total;
       missionLogs.insert(0, LogEntry(
@@ -616,41 +587,30 @@ class GameState extends ChangeNotifier {
     double missingCondition = 1.0 - ship.condition;
     int shipValue = getShipSaleValue(ship);
     int seconds = (missingCondition * shipValue * _timeScalingFactor / repairSpeedMultiplier).toInt();
-    
-    // --- BETA TESTING SWITCH ---
-    // Fast repairs
     seconds = (seconds * 0.1).toInt();
-    // ---------------------------
-
     return Duration(seconds: max(2, seconds));
   }
 
-  // Helper to find original template price
   int _getTemplatePrice(String modelName) {
     try {
       final template = ShipTemplate.all.firstWhere((t) => t.modelName == modelName);
       return template.price;
     } catch (e) {
-      return 1000; // Fallback
+      return 1000;
     }
   }
 
+  // --- REPAIRED UPGRADE COST LOGIC (ONE DECLARATION) ---
   int getUpgradeCost(Ship ship, int currentLevel) {
-    // New Formula: (ShipTemplate.price * 0.05) * pow(1.4, currentLevel)
     int basePrice = _getTemplatePrice(ship.modelName);
     double cost = (basePrice * 0.05) * pow(1.4, currentLevel);
     return cost.toInt();
   }
-  
+
   Duration getUpgradeDuration(Ship ship, int currentLevel) {
     int shipValue = getShipSaleValue(ship);
     int seconds = (shipValue * _timeScalingFactor * (1 + currentLevel * 0.1)).toInt();
-    
-    // --- BETA TESTING SWITCH ---
-    // Fast upgrades
     seconds = (seconds * 0.1).toInt();
-    // ---------------------------
-
     return Duration(seconds: max(2, seconds));
   }
 
@@ -664,7 +624,7 @@ class GameState extends ChangeNotifier {
         solars -= cost;
         ship.busyUntil = DateTime.now().add(getRepairDuration(ship));
         ship.currentTask = 'Repairing';
-        
+
         missionLogs.insert(0, LogEntry(
           timestamp: DateTime.now(),
           title: "Maintenance Begun",
@@ -672,43 +632,39 @@ class GameState extends ChangeNotifier {
           solarChange: -cost,
           isPositive: false,
         ));
-        
+
         _triggerUpdate();
       }
     }
   }
-  
+
   void repairAllShips() {
     int totalCost = 0;
     int baseCostTotal = 0;
     bool anyRepaired = false;
-    
-    // Calculate base multiplier inverse to find savings
-    // repairCostMultiplier is 0.9 or 0.75 etc.
     double mult = repairCostMultiplier;
-    
+
     for (var ship in fleet) {
       if (ship.condition < 1.0 && ship.busyUntil == null && ship.missionEndTime == null) {
         int cost = getRepairCost(ship);
-        // Reverse engineer base cost (approx)
         int baseCost = (cost / mult).round();
-        
+
         if (solars >= cost) {
           solars -= cost;
           totalCost += cost;
           baseCostTotal += baseCost;
-          
+
           ship.busyUntil = DateTime.now().add(getRepairDuration(ship));
           ship.currentTask = 'Repairing';
           anyRepaired = true;
         }
       }
     }
-    
+
     if (anyRepaired) {
       int saved = baseCostTotal - totalCost;
       String savingsText = saved > 0 ? " (Saved ⁂$saved via Gantry)" : "";
-      
+
       missionLogs.insert(0, LogEntry(
         timestamp: DateTime.now(),
         title: "Fleet Maintenance",
@@ -748,7 +704,7 @@ class GameState extends ChangeNotifier {
         case 'shield': ship.shieldLevel++; break;
         case 'ai': ship.aiLevel++; break;
       }
-      
+
       ship.busyUntil = DateTime.now().add(getUpgradeDuration(ship, currentLevel));
       ship.currentTask = 'Upgrading';
 
@@ -769,7 +725,7 @@ class GameState extends ChangeNotifier {
     int shipValue = getShipSaleValue(ship);
     return (missingCondition * (shipValue * 0.2) * repairCostMultiplier).toInt();
   }
-  
+
   int getTotalRepairCost() {
     int total = 0;
     for (var ship in fleet) {
@@ -778,11 +734,6 @@ class GameState extends ChangeNotifier {
       }
     }
     return total;
-  }
-
-  int getUpgradeCost(Ship ship, int currentLevel) {
-    int shipValue = getShipSaleValue(ship);
-    return ((shipValue * 0.1) * (1 + currentLevel * 0.2)).toInt();
   }
 
   int getShipSaleValue(Ship ship) {
@@ -802,7 +753,7 @@ class GameState extends ChangeNotifier {
         case 'Gantry': repairGantryLevel++; break;
         case 'Broadcasting': broadcastingArrayLevel++; break;
       }
-      
+
       missionLogs.insert(0, LogEntry(
         timestamp: DateTime.now(),
         title: "Base Infrastructure Upgraded",
@@ -810,7 +761,7 @@ class GameState extends ChangeNotifier {
         solarChange: -cost,
         isPositive: false,
       ));
-      
+
       _triggerUpdate();
     }
   }
@@ -823,7 +774,7 @@ class GameState extends ChangeNotifier {
 
       int value = getShipSaleValue(ship);
       solars += value;
-      
+
       missionLogs.insert(0, LogEntry(
         timestamp: DateTime.now(),
         title: "Ship Decommissioned",
@@ -841,7 +792,7 @@ class GameState extends ChangeNotifier {
     if (solars >= cost && fleet.length < maxFleetSize) {
       solars -= cost;
       fleet.add(newShip);
-      
+
       missionLogs.insert(0, LogEntry(
         timestamp: DateTime.now(),
         title: "Fleet Expansion",
@@ -899,7 +850,7 @@ class GameState extends ChangeNotifier {
   @override
   void dispose() {
     _gameTimer?.cancel();
-    _marketTimer?.cancel(); // Dispose new timer
+    _marketTimer?.cancel();
     super.dispose();
   }
 }
