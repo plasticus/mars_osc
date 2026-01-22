@@ -95,7 +95,10 @@ class _UpgradeRow extends StatelessWidget {
           SizedBox(
             width: 100,
             child: ElevatedButton(
-              onPressed: (isMaxed || !canAfford) ? null : () => state.upgradeShipStat(ship.id, statKey),
+              onPressed: (isMaxed || !canAfford) ? null : () {
+                state.upgradeShipStat(ship.id, statKey);
+                Navigator.pop(context);
+              },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 backgroundColor: Colors.blueGrey[800],

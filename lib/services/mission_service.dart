@@ -91,7 +91,7 @@ class MissionService {
 
   Mission _generateMissionForShip(Ship ship, int relayLevel) {
     // Tailored Logic: Push limits of the ship
-    double maxRange = ship.fuelCapacity * 10.0;
+    double maxRange = GameFormulas.getMaxDistanceAU(ship.fuelCapacity, ship.aiLevel);
     
     // Target 70-95% of max range, or random class distance if it fits
     double rangeTarget = maxRange * (0.7 + (_random.nextDouble() * 0.25));
