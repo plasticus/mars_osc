@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../models/mission_model.dart';
 import '../models/ship_model.dart';
+import '../utils/game_formulas.dart';
 
 class MissionService {
   final Random _random = Random();
@@ -38,6 +39,54 @@ class MissionService {
       minCargo: 1,
       rewardSolars: 100,
       baseDurationMinutes: 1,
+    );
+  }
+
+  Mission getLocalMiningRun() {
+    return Mission(
+      id: "miner_low_${DateTime.now().millisecondsSinceEpoch}",
+      title: "Belt Skimming (Miner)",
+      description: "A quick hop to the nearest carbonaceous asteroids for surface ore.",
+      requiredClass: "Miner",
+      distanceAU: 1.5, // Just outside Mars' immediate gravity well
+      minShieldLevel: 0,
+      minCargo: 1,
+      rewardSolars: 0,
+      rewardResource: 'Ore',
+      rewardResourceAmount: 8, // Slightly bumped for the extra distance
+      baseDurationMinutes: 0,
+    );
+  }
+
+  Mission getLocalGasRun() {
+    return Mission(
+      id: "tanker_low_${DateTime.now().millisecondsSinceEpoch}",
+      title: "Vent Siphoning (Tanker)",
+      description: "Intercepting a pocket of expelled gas from a nearby belt-station.",
+      requiredClass: "Tanker",
+      distanceAU: 1.8,
+      minShieldLevel: 0,
+      minCargo: 1,
+      rewardSolars: 0,
+      rewardResource: 'Gas',
+      rewardResourceAmount: 3,
+      baseDurationMinutes: 0,
+    );
+  }
+
+  Mission getLocalRiftRun() {
+    return Mission(
+      id: "harvester_low_${DateTime.now().millisecondsSinceEpoch}",
+      title: "Belt Anomaly Sweep (Harvester)",
+      description: "Scanning low-energy rift signatures on the very edge of the belt.",
+      requiredClass: "Harvester",
+      distanceAU: 2.0,
+      minShieldLevel: 0,
+      minCargo: 1,
+      rewardSolars: 0,
+      rewardResource: 'Crystals',
+      rewardResourceAmount: 1,
+      baseDurationMinutes: 0,
     );
   }
 
@@ -79,11 +128,22 @@ class MissionService {
       }
     }
 
+// Ensure low-level missions always exist for every unlocked class
     if (!newMissions.any((m) => m.title.contains("Local Scrap Run"))) {
       newMissions.add(getLocalScrapRun());
     }
     if (!newMissions.any((m) => m.title.contains("Local Courier Run"))) {
       newMissions.add(getLocalCourierRun());
+    }
+// Class-Gated Locals
+    if (relayLevel >= 2 && !newMissions.any((m) => m.title.contains("Belt Skimming"))) {
+      newMissions.add(getLocalMiningRun());
+    }
+    if (relayLevel >= 3 && !newMissions.any((m) => m.title.contains("Vent Siphoning"))) {
+      newMissions.add(getLocalGasRun());
+    }
+    if (relayLevel >= 4 && !newMissions.any((m) => m.title.contains("Belt Anomaly Sweep"))) {
+      newMissions.add(getLocalRiftRun());
     }
 
     return newMissions;

@@ -128,6 +128,13 @@ class ShipCard extends StatelessWidget {
     final state = Provider.of<GameState>(context, listen: false);
     final bool isBusy = ship.busyUntil != null;
     final bool isFullyRepaired = ship.condition >= 1.0;
+    
+    final bool isFullyUpgraded = 
+        ship.speed >= ship.maxSpeed &&
+        ship.cargoCapacity >= ship.maxCargo &&
+        ship.fuelCapacity >= ship.maxFuel &&
+        ship.shieldLevel >= ship.maxShield &&
+        ship.aiLevel >= ship.maxAI;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -200,19 +207,21 @@ class ShipCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: isFullyUpgraded ? null : () {
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
                           builder: (context) => DryDockUpgradeScreen(ship: ship),
                         );
                       },
-                      icon: const Icon(Icons.upgrade),
-                      label: const Text("UPGRADE"),
+                      icon: Icon(isFullyUpgraded ? Icons.check_circle : Icons.upgrade),
+                      label: Text(isFullyUpgraded ? "MAXED" : "UPGRADE"),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo[900],
-                        foregroundColor: Colors.white,
+                        backgroundColor: isFullyUpgraded ? Colors.grey[800] : Colors.indigo[900],
+                        foregroundColor: isFullyUpgraded ? Colors.grey[500] : Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
+                        disabledBackgroundColor: Colors.grey[900],
+                        disabledForegroundColor: Colors.grey[600],
                       ),
                     ),
                   ),
