@@ -32,9 +32,9 @@ class EngineeringScreen extends StatelessWidget {
           currentLevel: state.relayLevel,
           maxLevel: 4,
           upgrades: {
-            2: _BaseUpgradeData(10000, "Unlocks Tankers + New distant missions"),
-            3: _BaseUpgradeData(30000, "Unlocks Miners + Belt mining missions"),
-            4: _BaseUpgradeData(75000, "Unlocks Harvesters + Rift missions"),
+            2: _BaseUpgradeData(10000, "Unlocks Class: Miner + Belt missions"),
+            3: _BaseUpgradeData(30000, "Unlocks Class: Tanker + Gas missions"),
+            4: _BaseUpgradeData(75000, "Unlocks Class: Harvester + Rift missions"),
           },
           onUpgrade: (cost) => state.upgradeBase('Relay', cost),
         ),
@@ -42,11 +42,12 @@ class EngineeringScreen extends StatelessWidget {
           title: "Broadcasting Array",
           icon: Icons.radar,
           currentLevel: state.broadcastingArrayLevel,
-          maxLevel: 4,
+          maxLevel: 5,
           upgrades: {
-            2: _BaseUpgradeData(7500, "10 Active Contracts available"),
-            3: _BaseUpgradeData(25000, "20 Active Contracts available"),
-            4: _BaseUpgradeData(60000, "40 Active Contracts available"),
+            2: _BaseUpgradeData(7500, "+2 Missions per category"),
+            3: _BaseUpgradeData(25000, "+2 Missions per category"),
+            4: _BaseUpgradeData(60000, "+2 Missions per category"),
+            5: _BaseUpgradeData(120000, "+2 Missions per category (Max 10/cat)"),
           },
           onUpgrade: (cost) => state.upgradeBase('Broadcasting', cost),
         ),
@@ -66,11 +67,12 @@ class EngineeringScreen extends StatelessWidget {
           title: "Trade Depot / Silos",
           icon: Icons.store,
           currentLevel: state.tradeDepotLevel,
-          maxLevel: 3,
+          maxLevel: 5,
           upgrades: {
-            1: _BaseUpgradeData(12000, "Auto-sell AI avoids 'Bottom' 10% of prices"),
-            2: _BaseUpgradeData(35000, "Auto-sell AI avoids 'Bottom' 25% of prices"),
-            3: _BaseUpgradeData(90000, "Holding Silos unlocked (Manual hold/sell)"),
+            2: _BaseUpgradeData(12000, "Max 1000 m³ + Auto-Sell @ 110%"),
+            3: _BaseUpgradeData(35000, "Max 1500 m³ + Auto-Sell @ 115%"),
+            4: _BaseUpgradeData(60000, "Max 2000 m³ + Auto-Sell @ 120%"),
+            5: _BaseUpgradeData(100000, "Max 2500 m³ + Auto-Sell @ 125%"),
           },
           onUpgrade: (cost) => state.upgradeBase('Depot', cost),
           onOpen: () {
@@ -148,7 +150,6 @@ class _UpgradeCard extends StatelessWidget {
             ),
             const Divider(height: 24),
             
-            // OPEN BUTTON (If applicable)
             if (onOpen != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16.0),
@@ -168,7 +169,9 @@ class _UpgradeCard extends StatelessWidget {
             if (isMaxed)
               const Text("Systems fully operational.", style: TextStyle(color: Colors.greenAccent))
             else if (upgradeData != null) ...[
-              Text("Next: ${upgradeData.effect}", style: const TextStyle(fontSize: 13)),
+              Text("Upgrade to Lv $nextLevel:", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 4),
+              Text(upgradeData.effect, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -177,7 +180,7 @@ class _UpgradeCard extends StatelessWidget {
                   icon: const Icon(Icons.arrow_upward, size: 16),
                   label: Text("UPGRADE (⁂${upgradeData.cost})"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey[800],
+                    backgroundColor: canAfford ? Colors.blue : Colors.blueGrey[800], // Updated Color
                     foregroundColor: Colors.white,
                   ),
                 ),

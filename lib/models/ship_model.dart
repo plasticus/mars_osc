@@ -23,6 +23,7 @@ class Ship {
   // Mission/Task timing
   DateTime? missionStartTime;
   DateTime? missionEndTime;
+  double? missionDistance; // Stored for wear calc
   
   DateTime? busyUntil;
   String? currentTask; // 'Repairing', 'Upgrading'
@@ -54,6 +55,7 @@ class Ship {
     this.hasBeenRenamed = false,
     this.missionStartTime,
     this.missionEndTime,
+    this.missionDistance,
     this.busyUntil,
     this.currentTask,
     this.pendingReward = 0,
@@ -80,6 +82,7 @@ class Ship {
       'condition': condition,
       'missionStartTime': missionStartTime?.toIso8601String(),
       'missionEndTime': missionEndTime?.toIso8601String(),
+      'missionDistance': missionDistance,
       'busyUntil': busyUntil?.toIso8601String(),
       'currentTask': currentTask,
       'pendingReward': pendingReward,
@@ -109,6 +112,7 @@ class Ship {
       condition: json['condition'].toDouble(),
       missionStartTime: json['missionStartTime'] != null ? DateTime.parse(json['missionStartTime']) : null,
       missionEndTime: json['missionEndTime'] != null ? DateTime.parse(json['missionEndTime']) : null,
+      missionDistance: json['missionDistance']?.toDouble(),
       busyUntil: json['busyUntil'] != null ? DateTime.parse(json['busyUntil']) : null,
       currentTask: json['currentTask'],
       pendingReward: json['pendingReward'],

@@ -17,6 +17,17 @@ class _DryDockScreenState extends State<DryDockScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
     final dryDockShips = state.fleet.where((s) => s.missionEndTime == null).toList();
+    
+    // Sort by Value (Ascending: Cheap -> Expensive)
+    dryDockShips.sort((a, b) => state.getShipSaleValue(a).compareTo(state.getShipSaleValue(b)));
+
+    final int totalRepairCost = state.getTotalRepairCost();
+
+    // Count ships by class
+    Map<String, int> classCounts = {};
+    for (var ship in state.fleet) {
+      classCounts[ship.shipClass] = (classCounts[ship.shipClass] ?? 0) + 1;
+    }
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -37,6 +48,48 @@ class _DryDockScreenState extends State<DryDockScreen> {
               ),
             ],
           ),
+          
+          // Fleet Summary Table
+          if (state.fleet.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: classCounts.entries.map((e) => 
+                  Column(
+                    children: [
+                      Text("${e.value}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(e.key, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    ],
+                  )
+                ).toList(),
+              ),
+            ),
+
+          if (totalRepairCost > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: state.solars >= totalRepairCost 
+                      ? () => state.repairAllShips() 
+                      : null,
+                  icon: const Icon(Icons.build_circle, size: 18),
+                  label: Text("REPAIR ALL FLEET (⁂$totalRepairCost)"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[900],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+
           const SizedBox(height: 8),
           
           Expanded(
@@ -71,6 +124,7 @@ class ShipCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = Provider.of<GameState>(context, listen: false);
     final bool isBusy = ship.busyUntil != null;
+    final bool isFullyRepaired = ship.condition >= 1.0;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -161,24 +215,55 @@ class ShipCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: (ship.condition < 1.0 && state.solars >= state.getRepairCost(ship)) 
-                          ? () => state.repairShip(ship.id) 
-                          : null,
-                      icon: const Icon(Icons.build, size: 16),
-                      label: Text("REPAIR (⁂${state.getRepairCost(ship)})"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey[800],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
+                    child: isFullyRepaired 
+                      ? ElevatedButton.icon(
+                          onPressed: () => _confirmSell(context, state, ship),
+                          icon: const Icon(Icons.sell, size: 16),
+                          label: Text("SELL (⁂${state.getShipSaleValue(ship)})"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[900],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: (state.solars >= state.getRepairCost(ship)) 
+                              ? () => state.repairShip(ship.id) 
+                              : null,
+                          icon: const Icon(Icons.build, size: 16),
+                          label: Text("REPAIR (⁂${state.getRepairCost(ship)})"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueGrey[800],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
                   ),
                 ],
               ),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmSell(BuildContext context, GameState state, Ship ship) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Sale"),
+        content: Text("Are you sure you want to sell ${ship.nickname}? You will receive ⁂ ${state.getShipSaleValue(ship)}."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () {
+              state.sellShip(ship.id);
+              Navigator.pop(context);
+            },
+            child: const Text("SELL", style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }

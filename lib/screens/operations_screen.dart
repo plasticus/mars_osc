@@ -9,17 +9,135 @@ class OperationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
+    int currentStorage = state.ore + state.gas + state.crystals;
+    
+    // Sort fleet by Value (Ascending)
+    List<Ship> sortedFleet = List.from(state.fleet);
+    sortedFleet.sort((a, b) => state.getShipSaleValue(a).compareTo(state.getShipSaleValue(b)));
 
-    return state.fleet.isEmpty
-        ? const Center(child: Text("No ships in fleet. Visit the Shipyard!"))
-        : ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: state.fleet.length,
-            itemBuilder: (context, index) {
-              final ship = state.fleet[index];
-              return ShipSummaryCard(ship: ship);
-            },
-          );
+    // Calculate current AI Bonus
+    int bonusPercent = 100 + (state.tradeDepotLevel * 5);
+
+    return Column(
+      children: [
+        // Resource Inventory Header
+        if (currentStorage > 0)
+          Card(
+            margin: const EdgeInsets.all(8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("INVENTORY", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                      Text("$currentStorage / ${state.maxStorage} m³", 
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          color: currentStorage >= state.maxStorage ? Colors.redAccent : Colors.grey
+                        )
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      if (state.ore > 0) _ResourceChip(icon: Icons.landscape, label: "Ore", value: state.ore, color: Colors.brown),
+                      if (state.gas > 0) _ResourceChip(icon: Icons.cloud, label: "Gas", value: state.gas, color: Colors.cyan),
+                      if (state.crystals > 0) _ResourceChip(icon: Icons.diamond, label: "Crystals", value: state.crystals, color: Colors.purpleAccent),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: (currentStorage / state.maxStorage).clamp(0.0, 1.0),
+                    backgroundColor: Colors.grey[800],
+                    color: currentStorage >= state.maxStorage ? Colors.red : Colors.blueGrey,
+                    minHeight: 4,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Sell Actions
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          "Wait for AI Auto-Sell to earn $bonusPercent% market value.",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => state.manualSellAll(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepOrange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text("SELL NOW (100%)", style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Fleet List
+        Expanded(
+          child: sortedFleet.isEmpty
+              ? const Center(child: Text("No ships in fleet. Visit the Shipyard!"))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(8),
+                  itemCount: sortedFleet.length,
+                  itemBuilder: (context, index) {
+                    final ship = sortedFleet[index];
+                    return ShipSummaryCard(ship: ship);
+                  },
+                ),
+        ),
+        
+        // DEBUG / BETA BUTTON
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => state.debugCompleteAllMissions(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("BETA: COMPLETE ALL"),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResourceChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int value;
+  final Color color;
+
+  const _ResourceChip({required this.icon, required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 16, color: color),
+      label: Text("$value m³", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+      backgroundColor: Colors.black26,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+    );
   }
 }
 

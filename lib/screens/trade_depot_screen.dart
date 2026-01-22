@@ -97,9 +97,9 @@ class _ResourceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text("Stock: $amount units", style: const TextStyle(color: Colors.grey)),
+                  Text("Stock: $amount m³", style: const TextStyle(color: Colors.grey)),
                   const SizedBox(height: 4),
-                  Text("Current Price: ⁂$price / unit", style: TextStyle(color: color, fontSize: 12)),
+                  Text("Current Price: ⁂$price / m³", style: TextStyle(color: color, fontSize: 12)),
                 ],
               ),
             ),

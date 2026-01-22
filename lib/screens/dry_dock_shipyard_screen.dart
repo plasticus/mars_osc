@@ -16,7 +16,13 @@ class DryDockShipyardScreen extends StatelessWidget {
       length: shipClasses.length,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text("SHIPYARD CATALOG"),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("SHIPYARD CATALOG"),
+              Text("⁂ ${state.solars}", style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
           bottom: TabBar(
             isScrollable: true,
             tabs: shipClasses.map((c) => Tab(
