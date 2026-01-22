@@ -147,13 +147,18 @@ class ShipSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    String displayName = ship.nickname;
+    if (ship.isMaxed) {
+      displayName = "[Elite] $displayName";
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
           ListTile(
             onTap: () => _showShipDetails(context, ship),
-            title: Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(displayName, style: TextStyle(fontWeight: FontWeight.bold, color: ship.isMaxed ? Colors.amberAccent : null)),
             subtitle: Text("${ship.modelName} (${ship.shipClass})"),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -383,11 +388,11 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
 }
 
 class _DetailStat extends StatelessWidget {
-  final IconData icon;
   final String label;
   final dynamic value;
+  final IconData icon;
 
-  const _DetailStat({required this.icon, required this.label, required this.value});
+  const _DetailStat({required this.label, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {

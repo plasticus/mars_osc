@@ -63,6 +63,13 @@ class Ship {
     this.pendingResourceAmount = 0,
   });
 
+  bool get isMaxed => 
+      speed >= maxSpeed &&
+      cargoCapacity >= maxCargo &&
+      fuelCapacity >= maxFuel &&
+      shieldLevel >= maxShield &&
+      aiLevel >= maxAI;
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
