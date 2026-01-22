@@ -104,6 +104,14 @@ class GameState extends ChangeNotifier {
     });
   }
 
+  // --- LOGGING HELPER (Caps at 50) ---
+  void _addLog(LogEntry entry) {
+    missionLogs.insert(0, entry);
+    if (missionLogs.length > 50) {
+      missionLogs.removeRange(50, missionLogs.length);
+    }
+  }
+
   // --- PERSISTENCE LOGIC ---
 
   Future<void> _saveData() async {
@@ -310,7 +318,7 @@ class GameState extends ChangeNotifier {
     crystals -= soldCrystals;
     solars += revenue;
 
-    missionLogs.insert(0, LogEntry(
+    _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Auto-Sell AI",
       details: "Sold goods for ⁂$revenue (${(multiplier*100).toInt()}% rate). Left: $ore 🏔️ | $gas ☁️ | $crystals 💎",
@@ -327,7 +335,7 @@ class GameState extends ChangeNotifier {
     revenue += gas * getResourcePrice('Gas');
     revenue += crystals * getResourcePrice('Crystals');
 
-    missionLogs.insert(0, LogEntry(
+    _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Manual Liquidate",
       details: "Sold all inventory ($ore 🏔️ | $gas ☁️ | $crystals 💎) for ⁂$revenue.",
@@ -358,7 +366,7 @@ class GameState extends ChangeNotifier {
     }
 
     if (updated) {
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "BETA: Warp Speed",
         details: "All active timers advanced to completion.",
@@ -371,16 +379,16 @@ class GameState extends ChangeNotifier {
   void _processMaintenanceCompletion(Ship ship) {
     if (ship.currentTask == 'Repairing') {
       ship.condition = 1.0;
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Repair Complete",
-        details: "${ship.nickname} maintenance finished. Hull at 100%.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} maintenance finished. Hull at 100%.",
       ));
     } else if (ship.currentTask == 'Upgrading') {
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Upgrade Installed",
-        details: "${ship.nickname} systems have been enhanced.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} systems have been enhanced.",
       ));
     }
     ship.busyUntil = null;
@@ -391,16 +399,17 @@ class GameState extends ChangeNotifier {
     final shipIndex = fleet.indexWhere((s) => s.id == shipId);
     if (shipIndex != -1) {
       final now = DateTime.now();
-      fleet[shipIndex].missionStartTime = now;
-      fleet[shipIndex].missionDistance = mission.distanceAU;
+      final ship = fleet[shipIndex];
+      ship.missionStartTime = now;
+      ship.missionDistance = mission.distanceAU;
 
       double factor = 1920.0;
       factor *= 0.015;
 
-      int speed = fleet[shipIndex].speed;
+      int speed = ship.speed;
       if (speed < 1) speed = 1;
 
-      int ai = fleet[shipIndex].aiLevel;
+      int ai = ship.aiLevel;
       double aiMult = max(0.5, 1.0 - (ai * 0.05));
       factor *= aiMult;
 
@@ -409,11 +418,11 @@ class GameState extends ChangeNotifier {
 
       int seconds = max(5, rawSeconds.toInt());
 
-      fleet[shipIndex].missionEndTime = now.add(Duration(seconds: seconds));
+      ship.missionEndTime = now.add(Duration(seconds: seconds));
 
-      fleet[shipIndex].pendingReward = mission.rewardSolars;
-      fleet[shipIndex].pendingResource = mission.rewardResource;
-      fleet[shipIndex].pendingResourceAmount = mission.rewardResourceAmount;
+      ship.pendingReward = mission.rewardSolars;
+      ship.pendingResource = mission.rewardResource;
+      ship.pendingResourceAmount = mission.rewardResourceAmount;
 
       availableMissions.removeWhere((m) => m.id == mission.id);
 
@@ -423,10 +432,10 @@ class GameState extends ChangeNotifier {
         availableMissions.add(_missionService.getLocalCourierRun());
       }
 
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: now,
         title: "Mission Launched",
-        details: "${fleet[shipIndex].nickname} sent to ${mission.title}. ETA: ${seconds}s",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}. ETA: ${seconds}s",
       ));
 
       _triggerUpdate();
@@ -438,22 +447,18 @@ class GameState extends ChangeNotifier {
     String? resource = ship.pendingResource;
     int amount = ship.pendingResourceAmount;
 
-    // --- AI BONUS: REWARDS ---
     double aiRewardMult = 1.0 + (ship.aiLevel * 0.05);
     reward = (reward * aiRewardMult).toInt();
     amount = (amount * aiRewardMult).toInt();
 
-    // --- BETA TESTING SWITCH ---
     reward *= 10;
     amount *= 10;
 
-    // Calculate Base Total Value for Elite Bonus
     int baseTotalValue = reward;
     if (resource != null && amount > 0) {
       baseTotalValue += (amount * getResourcePrice(resource));
     }
 
-    // --- ELITE BONUS (5% mastery dividend) ---
     int eliteBonus = 0;
     if (ship.isMaxed) {
       eliteBonus = (baseTotalValue * 0.05).toInt();
@@ -471,7 +476,6 @@ class GameState extends ChangeNotifier {
 
     int overflowIncome = 0;
 
-    // Handle Resources with Storage Cap
     if (resource != null && amount > 0) {
       int currentTotal = ore + gas + crystals;
       int space = maxStorage - currentTotal;
@@ -508,10 +512,8 @@ class GameState extends ChangeNotifier {
 
     double dist = ship.missionDistance ?? 1.0;
     double baseWearPercent = dist * 0.002;
-
     double effectiveShield = ship.shieldLevel + (ship.aiLevel * 0.5);
     double mitigation = min(0.5, effectiveShield * 0.02);
-
     double wearPercent = baseWearPercent * (1.0 - mitigation);
 
     double floor = dist * 0.0005;
@@ -524,7 +526,7 @@ class GameState extends ChangeNotifier {
     ship.condition = (ship.condition - wearPercent).clamp(0.0, 1.0);
     double actualWear = (oldCondition - ship.condition) * 100;
 
-    missionLogs.insert(0, LogEntry(
+    _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Mission Return: ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
       details: "Earnings: $earnings. Hull Wear: -${actualWear.toStringAsFixed(2)}%.",
@@ -572,7 +574,7 @@ class GameState extends ChangeNotifier {
 
     if (sold) {
       solars += total;
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Market Transaction",
         details: "Sold $amount m³ of $resource for ⁂$total.",
@@ -600,7 +602,6 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  // --- REPAIRED UPGRADE COST LOGIC (ONE DECLARATION) ---
   int getUpgradeCost(Ship ship, int currentLevel) {
     int basePrice = _getTemplatePrice(ship.modelName);
     double cost = (basePrice * 0.05) * pow(1.4, currentLevel);
@@ -625,10 +626,10 @@ class GameState extends ChangeNotifier {
         ship.busyUntil = DateTime.now().add(getRepairDuration(ship));
         ship.currentTask = 'Repairing';
 
-        missionLogs.insert(0, LogEntry(
+        _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "Maintenance Begun",
-          details: "${ship.nickname} enters Dry Dock for repairs. Cost: ⁂$cost.",
+          details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} enters Dry Dock. Cost: ⁂$cost.",
           solarChange: -cost,
           isPositive: false,
         ));
@@ -665,7 +666,7 @@ class GameState extends ChangeNotifier {
       int saved = baseCostTotal - totalCost;
       String savingsText = saved > 0 ? " (Saved ⁂$saved via Gantry)" : "";
 
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Fleet Maintenance",
         details: "Batch repair order executed. Total Cost: ⁂$totalCost.$savingsText",
@@ -708,10 +709,10 @@ class GameState extends ChangeNotifier {
       ship.busyUntil = DateTime.now().add(getUpgradeDuration(ship, currentLevel));
       ship.currentTask = 'Upgrading';
 
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Systems Upgrade",
-        details: "${ship.nickname} $stat systems being enhanced. Cost: ⁂$cost.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} $stat systems enhanced. Cost: ⁂$cost.",
         solarChange: -cost,
         isPositive: false,
       ));
@@ -754,7 +755,7 @@ class GameState extends ChangeNotifier {
         case 'Broadcasting': broadcastingArrayLevel++; break;
       }
 
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Base Infrastructure Upgraded",
         details: "$type systems reached Level ${type == 'Hangar' ? hangarLevel : (type == 'Relay' ? relayLevel : (type == 'Server' ? serverFarmLevel : (type == 'Depot' ? tradeDepotLevel : (type == 'Gantry' ? repairGantryLevel : broadcastingArrayLevel))))}.",
@@ -775,10 +776,10 @@ class GameState extends ChangeNotifier {
       int value = getShipSaleValue(ship);
       solars += value;
 
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Ship Decommissioned",
-        details: "${ship.nickname} sold for salvage. Recoup: ⁂$value.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sold for salvage. Recoup: ⁂$value.",
         solarChange: value,
         isPositive: true,
       ));
@@ -793,7 +794,7 @@ class GameState extends ChangeNotifier {
       solars -= cost;
       fleet.add(newShip);
 
-      missionLogs.insert(0, LogEntry(
+      _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Fleet Expansion",
         details: "Purchased ${newShip.modelName} \"${newShip.nickname}\".",
@@ -819,10 +820,10 @@ class GameState extends ChangeNotifier {
         ship.nickname = newName;
         ship.hasBeenRenamed = true;
 
-        missionLogs.insert(0, LogEntry(
+        _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "Ship Re-registered",
-          details: "$oldName is now officially designated as $newName.${cost > 0 ? ' Fee: ⁂$cost.' : ' First time is free.'}",
+          details: "$oldName is now ${ship.isMaxed ? '[Elite] ' : ''}$newName.${cost > 0 ? ' Fee: ⁂$cost.' : ' First time is free.'}",
           solarChange: cost > 0 ? -cost : null,
           isPositive: false,
         ));
