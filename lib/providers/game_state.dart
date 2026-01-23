@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Cloud Persistence
 import 'dart:convert';
 import '../models/ship_model.dart';
 import '../models/mission_model.dart';
@@ -51,6 +54,10 @@ class GameState extends ChangeNotifier {
   String companyName = "New MOSC Branch";
   bool hasNamedCompany = false;
 
+  // Auth State
+  User? currentUser;
+  String? _currentUid;
+
   // Resource Inventory
   int ore = 0;
   int gas = 0;
@@ -63,7 +70,7 @@ class GameState extends ChangeNotifier {
   int tradeDepotLevel = 1;
   int repairGantryLevel = 0;
   int broadcastingArrayLevel = 1;
-
+  int totalDeliveries = 0; // Tracks every contract ever finished
 
   int get scanArrayLevel => relayLevel;
 
@@ -79,31 +86,63 @@ class GameState extends ChangeNotifier {
   static const double _timeScalingFactor = 0.54;
   bool isBetaTiming = true;
 
+  Future<void> _ensureUserDefaults(String uid) async {
+    final ref = FirebaseFirestore.instance.collection('users').doc(uid);
+
+    await ref.set({
+      'companyName': companyName,
+      'hasNamedCompany': hasNamedCompany,
+      'solars': solars,
+      'ore': ore,
+      'gas': gas,
+      'crystals': crystals,
+      'hangarLevel': hangarLevel,
+      'relayLevel': relayLevel,
+      'serverFarmLevel': serverFarmLevel,
+      'tradeDepotLevel': tradeDepotLevel,
+      'repairGantryLevel': repairGantryLevel,
+      'broadcastingArrayLevel': broadcastingArrayLevel,
+      // you can also ensure these exist if you want:
+      // 'fleet': fleet.map((s) => s.toJson()).toList(),
+      // 'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
+    }, SetOptions(merge: true));
+  }
+
+
   GameState() {
+    // Initial local load for guest mode/startup
     _loadData().then((_) {
       _isInitialized = true;
       if (fleet.isEmpty) {
-        fleet.add(Ship(
-          id: "starter_001",
-          nickname: "The Rusty Scow",
-          modelName: "Rusty Tug",
-          shipClass: "Mule",
-          speed: 2,
-          maxSpeed: 4,
-          cargoCapacity: 4,
-          maxCargo: 6,
-          fuelCapacity: 3,
-          maxFuel: 5,
-          shieldLevel: 1,
-          maxShield: 3,
-          aiLevel: 1,
-          maxAI: 2,
-        ));
+        _setupStarterShip();
       }
       _startGameLoop();
       _startMarketLoop();
       notifyListeners();
     });
+  }
+
+
+
+  void _setupStarterShip() {
+    fleet = [
+      Ship(
+        id: "starter_${DateTime.now().millisecondsSinceEpoch}",
+        nickname: "The Rusty Scow",
+        modelName: "Rusty Tug",
+        shipClass: "Mule",
+        speed: 2,
+        maxSpeed: 4,
+        cargoCapacity: 4,
+        maxCargo: 6,
+        fuelCapacity: 3,
+        maxFuel: 5,
+        shieldLevel: 1,
+        maxShield: 3,
+        aiLevel: 1,
+        maxAI: 2,
+      )
+    ];
   }
 
   // --- LOGGING HELPER (Caps at 50) ---
@@ -114,36 +153,151 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  // --- PERSISTENCE LOGIC ---
+  // --- AUTHENTICATION & CLOUD SESSION ---
+
+  Future<void> initializeUserSession(String uid) async {
+    if (_currentUid == uid) return;
+    _currentUid = uid;
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+
+        companyName = data['companyName'] ?? "New MOSC Branch";
+        hasNamedCompany = data['hasNamedCompany'] ?? false;
+        solars = data['solars'] ?? 50000;
+        ore = data['ore'] ?? 0;
+        gas = data['gas'] ?? 0;
+        crystals = data['crystals'] ?? 0;
+
+        hangarLevel = data['hangarLevel'] ?? 1;
+        relayLevel = data['relayLevel'] ?? 1;
+        serverFarmLevel = data['serverFarmLevel'] ?? 0;
+        tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
+        repairGantryLevel = data['repairGantryLevel'] ?? 0;
+        broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
+
+        if (data['fleet'] != null) {
+          final List<dynamic> decodedFleet = data['fleet'];
+          fleet = decodedFleet.map((item) => Ship.fromJson(item)).toList();
+        }
+
+        if (data['missionLogs'] != null) {
+          final List<dynamic> decodedLogs = data['missionLogs'];
+          missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
+        }
+      } else {
+        // New User Initialization
+        hasNamedCompany = false;
+        solars = 50000;
+        _setupStarterShip();
+        await _saveData(); // Create initial cloud doc
+      }
+
+      await _ensureUserDefaults(uid);
+
+      _isInitialized = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Firebase Session Init Error: $e");
+    }
+  }
+
+  Future<void> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      currentUser = userCredential.user;
+
+      _addLog(LogEntry(
+        timestamp: DateTime.now(),
+        title: "Authentication Successful",
+        details: "Welcome, ${currentUser?.displayName ?? 'Captain'}.",
+        isPositive: true,
+      ));
+
+      if (currentUser != null) {
+        await initializeUserSession(currentUser!.uid);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Firebase Auth Error: $e");
+    }
+  }
+
+  Future<void> signOut() async {
+    await FirebaseAuth.instance.signOut();
+    await GoogleSignIn().signOut();
+    currentUser = null;
+    _currentUid = null;
+
+    // Reset to guest state or clear
+    await resetProgress();
+    notifyListeners();
+  }
+
+  // --- PERSISTENCE LOGIC (Dual Support) ---
 
   Future<void> _saveData() async {
+    if (!_isInitialized || _currentUid == null) return;
+
+    int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
+
+    // NEW: Add the Engineering investment to the total
+    int engineeringValue = calculateBaseUpgradeInvestment();
+    int netWorth = solars + fleetValue + engineeringValue;
+
+    // 2. Find Single Most Valuable Ship
+    Ship? topShip;
+    int topShipValue = 0;
+    if (fleet.isNotEmpty) {
+      topShip = fleet.reduce((a, b) => getShipSaleValue(a) > getShipSaleValue(b) ? a : b);
+      topShipValue = getShipSaleValue(topShip);
+    }
+
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final batch = FirebaseFirestore.instance.batch();
 
-      await prefs.setInt('solars', solars);
-      await prefs.setInt('ore', ore);
-      await prefs.setInt('gas', gas);
-      await prefs.setInt('crystals', crystals);
+      // Update main user doc
+      final userRef = FirebaseFirestore.instance.collection('users').doc(_currentUid);
+      batch.set(userRef, {
+        'solars': solars,
+        'totalDeliveries': totalDeliveries,
+        // ... keep existing fields ...
+      }, SetOptions(merge: true));
 
-      await prefs.setInt('hangarLevel', hangarLevel);
-      await prefs.setInt('relayLevel', relayLevel);
-      await prefs.setInt('serverFarmLevel', serverFarmLevel);
-      await prefs.setInt('tradeDepotLevel', tradeDepotLevel);
-      await prefs.setInt('repairGantryLevel', repairGantryLevel);
-      await prefs.setInt('broadcastingArrayLevel', broadcastingArrayLevel);
-      await prefs.setBool('hasNamedCompany', hasNamedCompany);
+      // 3. Update the Leaderboard with your 4 categories
+      final leadRef = FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid);
+      batch.set(leadRef, {
+        'companyName': companyName,
+        'cashOnHand': solars,            // Category 1
+        'netWorth': netWorth,             // Category 2
+        'topShipNickname': topShip?.nickname ?? "N/A", // Category 3
+        'topShipClass': topShip?.shipClass ?? "N/A",
+        'topShipValue': topShipValue,
+        'totalDeliveries': totalDeliveries, // Category 4
+        'lastUpdate': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-      final fleetJson = jsonEncode(fleet.map((s) => s.toJson()).toList());
-      await prefs.setString('fleet', fleetJson);
-
-      final logsJson = jsonEncode(missionLogs.take(50).map((l) => l.toJson()).toList());
-      await prefs.setString('missionLogs', logsJson);
+      await batch.commit();
     } catch (e) {
-      debugPrint("Save error: $e");
+      debugPrint("Leaderboard Sync Error: $e");
     }
   }
 
   Future<void> _loadData() async {
+    // Standard Local Load (Used on startup before Auth)
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!prefs.containsKey('solars')) return;
@@ -152,15 +306,8 @@ class GameState extends ChangeNotifier {
       ore = prefs.getInt('ore') ?? 0;
       gas = prefs.getInt('gas') ?? 0;
       crystals = prefs.getInt('crystals') ?? 0;
-
       hangarLevel = prefs.getInt('hangarLevel') ?? 1;
       relayLevel = prefs.getInt('relayLevel') ?? 1;
-      serverFarmLevel = prefs.getInt('serverFarmLevel') ?? 0;
-      tradeDepotLevel = prefs.getInt('tradeDepotLevel') ?? 1;
-      if (tradeDepotLevel < 1) tradeDepotLevel = 1;
-
-      repairGantryLevel = prefs.getInt('repairGantryLevel') ?? 0;
-      broadcastingArrayLevel = prefs.getInt('broadcastingArrayLevel') ?? 1;
       hasNamedCompany = prefs.getBool('hasNamedCompany') ?? false;
 
       final fleetString = prefs.getString('fleet');
@@ -168,14 +315,8 @@ class GameState extends ChangeNotifier {
         final List<dynamic> decoded = jsonDecode(fleetString);
         fleet = decoded.map((item) => Ship.fromJson(item)).toList();
       }
-
-      final logsString = prefs.getString('missionLogs');
-      if (logsString != null) {
-        final List<dynamic> decoded = jsonDecode(logsString);
-        missionLogs = decoded.map((item) => LogEntry.fromJson(item)).toList();
-      }
     } catch (e) {
-      debugPrint("Load error: $e");
+      debugPrint("Local Load Error: $e");
     }
   }
 
@@ -183,36 +324,14 @@ class GameState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     solars = 50000;
-    ore = 0;
-    gas = 0;
-    crystals = 0;
-    hangarLevel = 1;
-    relayLevel = 1;
-    serverFarmLevel = 0;
-    tradeDepotLevel = 1;
-    repairGantryLevel = 0;
-    broadcastingArrayLevel = 1;
+    companyName = "New MOSC Branch";
+    ore = 0; gas = 0; crystals = 0;
+    hangarLevel = 1; relayLevel = 1; serverFarmLevel = 0;
+    tradeDepotLevel = 1; repairGantryLevel = 0; broadcastingArrayLevel = 1;
     hasNamedCompany = false;
     fleet = [];
     missionLogs = [];
-    _isInitialized = false;
-
-    fleet.add(Ship(
-      id: "starter_001",
-      nickname: "The Rusty Scow",
-      modelName: "Rusty Tug",
-      shipClass: "Mule",
-      speed: 2,
-      maxSpeed: 4,
-      cargoCapacity: 4,
-      maxCargo: 6,
-      fuelCapacity: 3,
-      maxFuel: 5,
-      shieldLevel: 1,
-      maxShield: 3,
-      aiLevel: 1,
-      maxAI: 2,
-    ));
+    _setupStarterShip();
     _isInitialized = true;
     notifyListeners();
   }
@@ -224,16 +343,10 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // -------------------------
+  // --- GAME LOGIC ---
 
-  int get maxFleetSize {
-    if (hangarLevel == 1) return 2;
-    return hangarLevel * 2;
-  }
-
-  int get maxStorage {
-    return tradeDepotLevel * 500;
-  }
+  int get maxFleetSize => hangarLevel == 1 ? 2 : hangarLevel * 2;
+  int get maxStorage => tradeDepotLevel * 500;
 
   bool isClassUnlocked(String shipClass) {
     if (shipClass == 'Mule' || shipClass == 'Sprinter') return true;
@@ -256,10 +369,7 @@ class GameState extends ChangeNotifier {
     return 1.0;
   }
 
-  double get repairSpeedMultiplier {
-    if (repairGantryLevel == 3) return 2.0;
-    return 1.0;
-  }
+  double get repairSpeedMultiplier => repairGantryLevel == 3 ? 2.0 : 1.0;
 
   void _startGameLoop() {
     _gameTimer?.cancel();
@@ -280,21 +390,17 @@ class GameState extends ChangeNotifier {
       }
 
       if (changesMade) {
-        _saveData();
-        notifyListeners();
+        _triggerUpdate();
       }
     });
   }
 
   void _startMarketLoop() {
     _marketTimer?.cancel();
-    const duration = Duration(minutes: 1);
-
-    _marketTimer = Timer.periodic(duration, (timer) {
+    _marketTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (ore > 0 || gas > 0 || crystals > 0) {
         _performAutoSell();
-        _saveData();
-        notifyListeners();
+        _triggerUpdate();
       }
     });
   }
@@ -348,37 +454,9 @@ class GameState extends ChangeNotifier {
       isPositive: true,
     ));
 
-    ore = 0;
-    gas = 0;
-    crystals = 0;
+    ore = 0; gas = 0; crystals = 0;
     solars += revenue;
-
     _triggerUpdate();
-  }
-
-  void debugCompleteAllMissions() {
-    bool updated = false;
-    final now = DateTime.now();
-    for (var ship in fleet) {
-      if (ship.missionEndTime != null) {
-        ship.missionEndTime = now;
-        updated = true;
-      }
-      if (ship.busyUntil != null) {
-        ship.busyUntil = now;
-        updated = true;
-      }
-    }
-
-    if (updated) {
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "BETA: Warp Speed",
-        details: "All active timers advanced to completion.",
-        isPositive: true,
-      ));
-      _triggerUpdate();
-    }
   }
 
   void _processMaintenanceCompletion(Ship ship) {
@@ -408,23 +486,13 @@ class GameState extends ChangeNotifier {
       ship.missionStartTime = now;
       ship.missionDistance = mission.distanceAU;
 
-      double factor = 1920.0;
-      factor *= 0.015;
+      double factor = 1920.0 * 0.015;
+      int speed = max(1, ship.speed);
+      double aiMult = max(0.5, 1.0 - (ship.aiLevel * 0.05));
 
-      int speed = ship.speed;
-      if (speed < 1) speed = 1;
-
-      int ai = ship.aiLevel;
-      double aiMult = max(0.5, 1.0 - (ai * 0.05));
-      factor *= aiMult;
-
-      double rawSeconds = (mission.distanceAU / speed) * factor;
-      if (rawSeconds > 300.0) rawSeconds = 300.0;
-
-      int seconds = max(5, rawSeconds.toInt());
+      int seconds = max(5, ((mission.distanceAU / speed) * factor * aiMult).clamp(0, 300).toInt());
 
       ship.missionEndTime = now.add(Duration(seconds: seconds));
-
       ship.pendingReward = mission.rewardSolars;
       ship.pendingResource = mission.rewardResource;
       ship.pendingResourceAmount = mission.rewardResourceAmount;
@@ -448,134 +516,72 @@ class GameState extends ChangeNotifier {
   }
 
   void _processMissionCompletion(Ship ship) {
+    totalDeliveries++; // Increment for Category 4
     int reward = ship.pendingReward;
-    String? resource = ship.pendingResource;
     int amount = ship.pendingResourceAmount;
 
     double aiRewardMult = 1.0 + (ship.aiLevel * 0.05);
-    reward = (reward * aiRewardMult).toInt();
-    amount = (amount * aiRewardMult).toInt();
+    reward = (reward * aiRewardMult * 10).toInt();
+    amount = (amount * aiRewardMult * 10).toInt();
 
-    reward *= 10;
-    amount *= 10;
-
-    int baseTotalValue = reward;
-    if (resource != null && amount > 0) {
-      baseTotalValue += (amount * getResourcePrice(resource));
-    }
-
-    int eliteBonus = 0;
-    if (ship.isMaxed) {
-      eliteBonus = (baseTotalValue * 0.05).toInt();
-    }
-
+    int eliteBonus = ship.isMaxed ? ((reward + (amount * getResourcePrice(ship.pendingResource ?? ''))) * 0.05).toInt() : 0;
     solars += reward + eliteBonus;
 
-    String earnings = "";
-    if (reward > 0) earnings += "⁂$reward";
+    String earnings = reward > 0 ? "⁂$reward" : "";
+    if (eliteBonus > 0) earnings += (earnings.isEmpty ? "" : " + ") + "⁂$eliteBonus (Elite)";
 
-    if (eliteBonus > 0) {
-      if (earnings.isNotEmpty) earnings += " + ";
-      earnings += "⁂$eliteBonus (Elite)";
-    }
-
-    int overflowIncome = 0;
-
-    if (resource != null && amount > 0) {
-      int currentTotal = ore + gas + crystals;
-      int space = maxStorage - currentTotal;
+    if (ship.pendingResource != null && amount > 0) {
+      int space = maxStorage - (ore + gas + crystals);
       int toStore = min(amount, max(0, space));
       int overflow = amount - toStore;
 
       if (toStore > 0) {
-        if (resource == 'Ore') ore += toStore;
-        if (resource == 'Gas') gas += toStore;
-        if (resource == 'Crystals') crystals += toStore;
+        if (ship.pendingResource == 'Ore') ore += toStore;
+        if (ship.pendingResource == 'Gas') gas += toStore;
+        if (ship.pendingResource == 'Crystals') crystals += toStore;
       }
 
-      String icon = "";
-      if (resource == 'Ore') icon = "🏔️";
-      if (resource == 'Gas') icon = "☁️";
-      if (resource == 'Crystals') icon = "💎";
-
-      if (earnings.isNotEmpty) earnings += " + ";
-      earnings += "$toStore m³ $icon $resource";
+      String icon = ship.pendingResource == 'Ore' ? "🏔️" : (ship.pendingResource == 'Gas' ? "☁️" : "💎");
+      earnings += (earnings.isEmpty ? "" : " + ") + "$toStore m³ $icon ${ship.pendingResource}";
 
       if (overflow > 0) {
-        int price = getResourcePrice(resource);
-        int penaltyPrice = (price * 0.75).toInt();
-        int overflowVal = overflow * penaltyPrice;
-        solars += overflowVal;
-        overflowIncome = overflowVal;
-
-        int potentialVal = overflow * price;
-        int lostVal = potentialVal - overflowVal;
-
-        earnings += "\n(⚠️ Storage Full: $overflow m³ $icon sold rushed. Lost potential ⁂$lostVal)";
+        int val = (overflow * getResourcePrice(ship.pendingResource!) * 0.75).toInt();
+        solars += val;
+        earnings += "\n(⚠️ Storage Full: $overflow m³ sold rushed for ⁂$val)";
       }
     }
 
-    double dist = ship.missionDistance ?? 1.0;
-    double baseWearPercent = dist * 0.002;
-    double effectiveShield = ship.shieldLevel + (ship.aiLevel * 0.5);
-    double mitigation = min(0.5, effectiveShield * 0.02);
-    double wearPercent = baseWearPercent * (1.0 - mitigation);
+    double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
+    wear = max(wear, (ship.missionDistance ?? 1.0) * 0.0005) * (0.8 + Random().nextDouble() * 0.4);
 
-    double floor = dist * 0.0005;
-    if (wearPercent < floor) wearPercent = floor;
-
-    double variance = 0.8 + (Random().nextDouble() * 0.4);
-    wearPercent *= variance;
-
-    double oldCondition = ship.condition;
-    ship.condition = (ship.condition - wearPercent).clamp(0.0, 1.0);
-    double actualWear = (oldCondition - ship.condition) * 100;
+    double oldC = ship.condition;
+    ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
 
     _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Mission Return: ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
-      details: "Earnings: $earnings. Hull Wear: -${actualWear.toStringAsFixed(2)}%.",
-      solarChange: reward + overflowIncome + eliteBonus,
+      details: "Earnings: $earnings. Hull Wear: -${((oldC - ship.condition) * 100).toStringAsFixed(2)}%.",
       isPositive: true,
     ));
 
-    ship.pendingReward = 0;
-    ship.pendingResource = null;
-    ship.pendingResourceAmount = 0;
-    ship.missionStartTime = null;
-    ship.missionEndTime = null;
-    ship.missionDistance = null;
+    ship.pendingReward = 0; ship.pendingResource = null; ship.pendingResourceAmount = 0;
+    ship.missionStartTime = null; ship.missionEndTime = null; ship.missionDistance = null;
   }
 
   int getResourcePrice(String resource) {
-    final now = DateTime.now().minute;
-    double variance = 1.0 + (sin(now / 10) * 0.2);
-
-    switch(resource) {
-      case 'Ore': return (10 * variance).toInt();
-      case 'Gas': return (25 * variance).toInt();
-      case 'Crystals': return (100 * variance).toInt();
-      default: return 0;
-    }
+    double variance = 1.0 + (sin(DateTime.now().minute / 10) * 0.2);
+    if (resource == 'Ore') return (10 * variance).toInt();
+    if (resource == 'Gas') return (25 * variance).toInt();
+    if (resource == 'Crystals') return (100 * variance).toInt();
+    return 0;
   }
 
   void sellResource(String resource, int amount) {
-    if (amount <= 0) return;
-
-    int price = getResourcePrice(resource);
-    int total = price * amount;
-
+    int total = getResourcePrice(resource) * amount;
     bool sold = false;
-    if (resource == 'Ore' && ore >= amount) {
-      ore -= amount;
-      sold = true;
-    } else if (resource == 'Gas' && gas >= amount) {
-      gas -= amount;
-      sold = true;
-    } else if (resource == 'Crystals' && crystals >= amount) {
-      crystals -= amount;
-      sold = true;
-    }
+    if (resource == 'Ore' && ore >= amount) { ore -= amount; sold = true; }
+    else if (resource == 'Gas' && gas >= amount) { gas -= amount; sold = true; }
+    else if (resource == 'Crystals' && crystals >= amount) { crystals -= amount; sold = true; }
 
     if (sold) {
       solars += total;
@@ -584,262 +590,204 @@ class GameState extends ChangeNotifier {
         title: "Market Transaction",
         details: "Sold $amount m³ of $resource for ⁂$total.",
         solarChange: total,
-        isPositive: true,
       ));
       _triggerUpdate();
     }
   }
 
   Duration getRepairDuration(Ship ship) {
-    double missingCondition = 1.0 - ship.condition;
-    int shipValue = getShipSaleValue(ship);
-    int seconds = (missingCondition * shipValue * _timeScalingFactor / repairSpeedMultiplier).toInt();
-    seconds = (seconds * 0.1).toInt();
-    return Duration(seconds: max(2, seconds));
+    final damage = (1.0 - ship.condition).clamp(0.0, 1.0);
+    final sale = getShipSaleValue(ship).toDouble();
+
+    const double minSale = 1000;     // cheapest template-ish
+    const double maxSale = 420000;   // most expensive template-ish
+
+    final logMin = log(minSale);
+    final logMax = log(maxSale);
+    final logSale = log(sale.clamp(minSale, maxSale));
+
+    final valueNorm = ((logSale - logMin) / (logMax - logMin)).clamp(0.0, 1.0);
+
+    final minSeconds = _lerp(5.0, 20.0, valueNorm);
+    final maxSeconds = _lerp(100.0, 666.0, valueNorm);
+
+    final gamma = _lerp(1.0, 1.8, valueNorm);
+
+    final curvedDamage = pow(damage, gamma).toDouble();
+
+    var seconds = minSeconds + curvedDamage * (maxSeconds - minSeconds);
+
+    seconds = seconds / repairSpeedMultiplier;
+
+    final secInt = seconds.round().clamp(2, 3600);
+
+    return Duration(seconds: secInt);
   }
 
-  int _getTemplatePrice(String modelName) {
-    try {
-      final template = ShipTemplate.all.firstWhere((t) => t.modelName == modelName);
-      return template.price;
-    } catch (e) {
-      return 1000;
-    }
-  }
-
-  int getUpgradeCost(Ship ship, int currentLevel) {
-    int basePrice = _getTemplatePrice(ship.modelName);
-    double cost = (basePrice * 0.05) * pow(1.4, currentLevel);
-    return cost.toInt();
-  }
-
-  Duration getUpgradeDuration(Ship ship, int currentLevel) {
-    int shipValue = getShipSaleValue(ship);
-    int seconds = (shipValue * _timeScalingFactor * (1 + currentLevel * 0.1)).toInt();
-    seconds = (seconds * 0.1).toInt();
-    return Duration(seconds: max(2, seconds));
-  }
-
-  void repairShip(String shipId) {
-    final shipIndex = fleet.indexWhere((s) => s.id == shipId);
-    if (shipIndex != -1) {
-      final ship = fleet[shipIndex];
-      int cost = getRepairCost(ship);
-
-      if (solars >= cost && ship.condition < 1.0 && ship.busyUntil == null) {
-        solars -= cost;
-        ship.busyUntil = DateTime.now().add(getRepairDuration(ship));
-        ship.currentTask = 'Repairing';
-
-        _addLog(LogEntry(
-          timestamp: DateTime.now(),
-          title: "Maintenance Begun",
-          details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} enters Dry Dock. Cost: ⁂$cost.",
-          solarChange: -cost,
-          isPositive: false,
-        ));
-
-        _triggerUpdate();
-      }
-    }
-  }
+  double _lerp(double a, double b, double t) => a + (b - a) * t;
 
   void repairAllShips() {
-    int totalCost = 0;
-    int baseCostTotal = 0;
-    bool anyRepaired = false;
-    double mult = repairCostMultiplier;
-
-    for (var ship in fleet) {
-      if (ship.condition < 1.0 && ship.busyUntil == null && ship.missionEndTime == null) {
-        int cost = getRepairCost(ship);
-        int baseCost = (cost / mult).round();
-
-        if (solars >= cost) {
-          solars -= cost;
-          totalCost += cost;
-          baseCostTotal += baseCost;
-
-          ship.busyUntil = DateTime.now().add(getRepairDuration(ship));
-          ship.currentTask = 'Repairing';
-          anyRepaired = true;
-        }
+    int total = 0;
+    for (var s in fleet) {
+      if (s.condition < 1.0 && s.busyUntil == null && s.missionEndTime == null) {
+        int cost = getRepairCost(s);
+        if (solars >= cost) { solars -= cost; total += cost; s.busyUntil = DateTime.now().add(getRepairDuration(s)); s.currentTask = 'Repairing'; }
       }
     }
-
-    if (anyRepaired) {
-      int saved = baseCostTotal - totalCost;
-      String savingsText = saved > 0 ? " (Saved ⁂$saved via Gantry)" : "";
-
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Fleet Maintenance",
-        details: "Batch repair order executed. Total Cost: ⁂$totalCost.$savingsText",
-        solarChange: -totalCost,
-        isPositive: false,
-      ));
+    if (total > 0) {
+      _addLog(LogEntry(timestamp: DateTime.now(), title: "Fleet Maintenance", details: "Batch repair executed. Total: ⁂$total.", solarChange: -total, isPositive: false));
       _triggerUpdate();
     }
   }
 
   void upgradeShipStat(String shipId, String stat) {
-    final shipIndex = fleet.indexWhere((s) => s.id == shipId);
-    if (shipIndex == -1) return;
-    final ship = fleet[shipIndex];
-    if (ship.busyUntil != null || ship.missionEndTime != null) return;
+    final idx = fleet.indexWhere((s) => s.id == shipId);
+    if (idx == -1) return;
+    final s = fleet[idx];
+    if (s.busyUntil != null || s.missionEndTime != null) return;
 
-    int currentLevel = 0;
-    int maxLevel = 0;
+    int cur = 0, mx = 0;
+    if (stat == 'speed') { cur = s.speed; mx = s.maxSpeed; }
+    else if (stat == 'cargo') { cur = s.cargoCapacity; mx = s.maxCargo; }
+    else if (stat == 'fuel') { cur = s.fuelCapacity; mx = s.maxFuel; }
+    else if (stat == 'shield') { cur = s.shieldLevel; mx = s.maxShield; }
+    else if (stat == 'ai') { cur = s.aiLevel; mx = s.maxAI; }
 
-    switch(stat) {
-      case 'speed': currentLevel = ship.speed; maxLevel = ship.maxSpeed; break;
-      case 'cargo': currentLevel = ship.cargoCapacity; maxLevel = ship.maxCargo; break;
-      case 'fuel': currentLevel = ship.fuelCapacity; maxLevel = ship.maxFuel; break;
-      case 'shield': currentLevel = ship.shieldLevel; maxLevel = ship.maxShield; break;
-      case 'ai': currentLevel = ship.aiLevel; maxLevel = ship.maxAI; break;
-    }
-
-    int cost = getUpgradeCost(ship, currentLevel);
-
-    if (solars >= cost && currentLevel < maxLevel) {
+    int cost = getUpgradeCost(s, cur);
+    if (solars >= cost && cur < mx) {
       solars -= cost;
-      switch(stat) {
-        case 'speed': ship.speed++; break;
-        case 'cargo': ship.cargoCapacity++; break;
-        case 'fuel': ship.fuelCapacity++; break;
-        case 'shield': ship.shieldLevel++; break;
-        case 'ai': ship.aiLevel++; break;
-      }
+      if (stat == 'speed') s.speed++;
+      else if (stat == 'cargo') s.cargoCapacity++;
+      else if (stat == 'fuel') s.fuelCapacity++;
+      else if (stat == 'shield') s.shieldLevel++;
+      else if (stat == 'ai') s.aiLevel++;
 
-      ship.busyUntil = DateTime.now().add(getUpgradeDuration(ship, currentLevel));
-      ship.currentTask = 'Upgrading';
-
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Systems Upgrade",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} $stat systems enhanced. Cost: ⁂$cost.",
-        solarChange: -cost,
-        isPositive: false,
-      ));
-
+      s.busyUntil = DateTime.now().add(getUpgradeDuration(s, cur));
+      s.currentTask = 'Upgrading';
+      _addLog(LogEntry(timestamp: DateTime.now(), title: "Systems Upgrade", details: "${s.nickname} $stat enhanced. Cost: ⁂$cost.", solarChange: -cost, isPositive: false));
       _triggerUpdate();
     }
   }
 
-  int getRepairCost(Ship ship) {
-    double missingCondition = 1.0 - ship.condition;
-    int shipValue = getShipSaleValue(ship);
-    return (missingCondition * (shipValue * 0.2) * repairCostMultiplier).toInt();
+  int getRepairCost(Ship s) => ((1.0 - s.condition) * (getShipSaleValue(s) * 0.2) * repairCostMultiplier).toInt();
+  int getShipSaleValue(Ship s) {
+    int basePrice = _getTemplatePrice(s.modelName);
+    double baseValue = basePrice * 0.7; // 70% Depreciation
+
+    // Add 50% of the total solar investment spent on upgrades
+    int upgradeInvestment = _calculateTotalUpgradeInvestment(s);
+    double totalAppraisal = baseValue + (upgradeInvestment * 0.5);
+
+    // Factor in the ship's current physical condition (0.0 to 1.0)
+    return (totalAppraisal * (0.5 + s.condition * 0.5)).toInt();
   }
 
-  int getTotalRepairCost() {
+  /// Calculates every solar spent on this ship's stats using the upgrade cost formula.
+  int _calculateTotalUpgradeInvestment(Ship s) {
+    int investment = 0;
+    // Fetch starting levels from the template to calculate the "delta"
+    final template = ShipTemplate.all.firstWhere((t) => t.modelName == s.modelName);
+
+    investment += _sumStatCost(s, s.speed, template.baseSpeed);
+    investment += _sumStatCost(s, s.cargoCapacity, template.baseCargo);
+    investment += _sumStatCost(s, s.fuelCapacity, template.baseFuel);
+    investment += _sumStatCost(s, s.shieldLevel, template.baseShield);
+    investment += _sumStatCost(s, s.aiLevel, template.baseAI);
+
+
+    return investment;
+  }
+
+  int _sumStatCost(Ship s, int currentLevel, int startLevel) {
     int total = 0;
-    for (var ship in fleet) {
-      if (ship.condition < 1.0 && ship.busyUntil == null && ship.missionEndTime == null) {
-        total += getRepairCost(ship);
-      }
+    for (int i = startLevel; i < currentLevel; i++) {
+      total += getUpgradeCost(s, i);
     }
     return total;
-  }
-
-  int getShipSaleValue(Ship ship) {
-    int baseStatsValue = (ship.speed + ship.cargoCapacity + ship.shieldLevel + ship.aiLevel + ship.fuelCapacity) * 50;
-    double conditionMult = 0.5 + (ship.condition * 0.5);
-    return (baseStatsValue * conditionMult).toInt();
   }
 
   void upgradeBase(String type, int cost) {
     if (solars >= cost) {
       solars -= cost;
-      switch(type) {
-        case 'Hangar': hangarLevel++; break;
-        case 'Relay': relayLevel++; break;
-        case 'Server': serverFarmLevel++; break;
-        case 'Depot': tradeDepotLevel++; break;
-        case 'Gantry': repairGantryLevel++; break;
-        case 'Broadcasting': broadcastingArrayLevel++; break;
-      }
+      if (type == 'Hangar') hangarLevel++;
+      else if (type == 'Relay') relayLevel++;
+      else if (type == 'Server') serverFarmLevel++;
+      else if (type == 'Depot') tradeDepotLevel++;
+      else if (type == 'Gantry') repairGantryLevel++;
+      else if (type == 'Broadcasting') broadcastingArrayLevel++;
 
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Base Infrastructure Upgraded",
-        details: "$type systems reached Level ${type == 'Hangar' ? hangarLevel : (type == 'Relay' ? relayLevel : (type == 'Server' ? serverFarmLevel : (type == 'Depot' ? tradeDepotLevel : (type == 'Gantry' ? repairGantryLevel : broadcastingArrayLevel))))}.",
-        solarChange: -cost,
-        isPositive: false,
-      ));
-
+      _addLog(LogEntry(timestamp: DateTime.now(), title: "Base Upgraded", details: "$type reached Level ${[hangarLevel, relayLevel, serverFarmLevel, tradeDepotLevel, repairGantryLevel, broadcastingArrayLevel].join(', ')}", solarChange: -cost, isPositive: false));
       _triggerUpdate();
     }
   }
 
-  void sellShip(String shipId) {
-    final shipIndex = fleet.indexWhere((s) => s.id == shipId);
-    if (shipIndex != -1) {
-      final ship = fleet[shipIndex];
-      if (ship.missionEndTime != null || ship.busyUntil != null) return;
-
-      int value = getShipSaleValue(ship);
-      solars += value;
-
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Ship Decommissioned",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sold for salvage. Recoup: ⁂$value.",
-        solarChange: value,
-        isPositive: true,
-      ));
-
-      fleet.removeAt(shipIndex);
+  void sellShip(String id) {
+    final idx = fleet.indexWhere((s) => s.id == id);
+    if (idx != -1 && fleet[idx].missionEndTime == null && fleet[idx].busyUntil == null) {
+      int val = getShipSaleValue(fleet[idx]);
+      solars += val;
+      _addLog(LogEntry(timestamp: DateTime.now(), title: "Ship Decommissioned", details: "${fleet[idx].nickname} salvaged for ⁂$val.", solarChange: val));
+      fleet.removeAt(idx);
       _triggerUpdate();
     }
   }
 
-  bool buyShip(Ship newShip, int cost) {
-    if (solars >= cost && fleet.length < maxFleetSize) {
-      solars -= cost;
-      fleet.add(newShip);
+  bool buyShip(Ship s, int cost) {
+    int actualCost = _getTemplatePrice(s.modelName);
+    // Use your hangarLevel logic here directly
+    int currentLimit = hangarLevel == 1 ? 2 : hangarLevel * 2;
 
+    if (solars >= actualCost && fleet.length < currentLimit) {
+      solars -= actualCost;
+      fleet.add(s);
       _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Fleet Expansion",
-        details: "Purchased ${newShip.modelName} \"${newShip.nickname}\".",
-        solarChange: -cost,
-        isPositive: false,
+          timestamp: DateTime.now(),
+          title: "Fleet Expansion",
+          details: "Purchased ${s.modelName} \"${s.nickname}\".",
+          solarChange: -actualCost,
+          isPositive: false
       ));
-
       _triggerUpdate();
       return true;
     }
     return false;
   }
 
-  void renameShip(String shipId, String newName) {
-    final shipIndex = fleet.indexWhere((s) => s.id == shipId);
-    if (shipIndex != -1 && newName.isNotEmpty) {
-      final ship = fleet[shipIndex];
-      int cost = ship.hasBeenRenamed ? 100 : 0;
-
+  void renameShip(String id, String name) {
+    final idx = fleet.indexWhere((s) => s.id == id);
+    if (idx != -1 && name.isNotEmpty) {
+      final s = fleet[idx];
+      int cost = s.hasBeenRenamed ? 100 : 0;
       if (solars >= cost) {
         solars -= cost;
-        String oldName = ship.nickname;
-        ship.nickname = newName;
-        ship.hasBeenRenamed = true;
-
-        _addLog(LogEntry(
-          timestamp: DateTime.now(),
-          title: "Ship Re-registered",
-          details: "$oldName is now ${ship.isMaxed ? '[Elite] ' : ''}$newName.${cost > 0 ? ' Fee: ⁂$cost.' : ' First time is free.'}",
-          solarChange: cost > 0 ? -cost : null,
-          isPositive: false,
-        ));
-
+        s.nickname = name;
+        s.hasBeenRenamed = true;
         _triggerUpdate();
       }
     }
   }
 
+  void setInitialCompanyName(String name) {
+    companyName = name;
+    hasNamedCompany = true;
+    _triggerUpdate();
+  }
+
+
+  /// Calculates the sum of all repair costs for ships that are damaged and not busy.
+  int getTotalRepairCost() {
+    int total = 0;
+    for (var s in fleet) {
+      if (s.condition < 1.0 && s.busyUntil == null && s.missionEndTime == null) {
+        total += getRepairCost(s);
+      }
+    }
+    return total;
+  }
+
   void updateMissions(List<Mission> newMissions) {
     availableMissions = newMissions;
+    // Keep those locals pinned so there's always something to do
     if (!availableMissions.any((m) => m.title.contains("Local Scrap Run"))) {
       availableMissions.add(_missionService.getLocalScrapRun());
     }
@@ -849,14 +797,45 @@ class GameState extends ChangeNotifier {
     _triggerUpdate();
   }
 
+  /// Refreshes the mission board using the mission service.
   void generateNewMissions() {
     updateMissions(_missionService.generateMissions(relayLevel, broadcastingArrayLevel, fleet));
   }
 
-  void setInitialCompanyName(String name) {
-    companyName = name;
-    hasNamedCompany = true;
-    _triggerUpdate(); // This saves the data and updates the UI
+  /// Calculates total solars spent on upgrading base facilities.
+  int calculateBaseUpgradeInvestment() {
+    int total = 0;
+
+    // We sum the cost for every level starting from 1 up to the current level
+    // Note: Most facilities start at Level 1, some at Level 0.
+    total += _sumBaseCategoryCost('Hangar', hangarLevel, 1);
+    total += _sumBaseCategoryCost('Relay', relayLevel, 1);
+    total += _sumBaseCategoryCost('Server', serverFarmLevel, 0);
+    total += _sumBaseCategoryCost('Depot', tradeDepotLevel, 1);
+    total += _sumBaseCategoryCost('Gantry', repairGantryLevel, 0);
+    total += _sumBaseCategoryCost('Broadcasting', broadcastingArrayLevel, 1);
+
+    return total;
+  }
+
+  /// Helper to simulate the costs paid for each level jump.
+  int _sumBaseCategoryCost(String type, int currentLevel, int startLevel) {
+    int categoryTotal = 0;
+    // We loop from the starting level to the current level
+    for (int i = startLevel; i < currentLevel; i++) {
+      categoryTotal += getBaseUpgradeCost(type, i);
+    }
+    return categoryTotal;
+  }
+
+  /// This should match your existing upgrade cost logic in EngineeringScreen.
+  int getBaseUpgradeCost(String type, int level) {
+    // Replace these with your actual price scaling logic
+    switch (type) {
+      case 'Hangar': return (5000 * pow(2, level)).toInt();
+      case 'Relay': return (10000 * pow(2.5, level)).toInt();
+      default: return (2500 * pow(1.8, level)).toInt();
+    }
   }
 
   @override
@@ -865,4 +844,4 @@ class GameState extends ChangeNotifier {
     _marketTimer?.cancel();
     super.dispose();
   }
-}
+} // <--- Final class bracket

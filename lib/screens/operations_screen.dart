@@ -172,21 +172,27 @@ class ShipSummaryCard extends StatelessWidget {
 
   Widget _buildMissionProgress(Ship ship) {
     return StreamBuilder<int>(
-      stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+      stream: Stream.periodic(const Duration(seconds: 5), (i) => i),
       builder: (context, snapshot) {
         final now = DateTime.now();
-        
-        // Safety check: if missionEndTime is null (completed), return empty
         if (ship.missionEndTime == null) return const SizedBox.shrink();
-
-        // If completed but not yet processed by GameState loop
         if (now.isAfter(ship.missionEndTime!)) {
            return const SizedBox(height: 4, child: LinearProgressIndicator(color: Colors.greenAccent));
         }
 
         final totalDuration = ship.missionEndTime!.difference(ship.missionStartTime!);
         final elapsed = now.difference(ship.missionStartTime!);
-        double progress = elapsed.inSeconds / totalDuration.inSeconds;
+
+        final totalSeconds = totalDuration.inSeconds;
+        final elapsedSeconds = elapsed.inSeconds;
+
+        double progress;
+        if (totalSeconds <= 0) {
+          progress = 0.0;
+        } else {
+          progress = elapsedSeconds / totalSeconds;
+          progress = progress.clamp(0.0, 1.0);
+        }
 
         final remaining = ship.missionEndTime!.difference(now);
         final timeStr = "${remaining.inMinutes}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')}";
@@ -217,18 +223,64 @@ class ShipSummaryCard extends StatelessWidget {
   }
 
   Widget _buildStatusText(Ship ship) {
+    //This widget just tries to get ship status of busy/maintenance/whatever
     if (ship.missionEndTime != null) {
-      return const Text("ON MISSION", style: TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold));
+      return const Text(
+        "ON MISSION",
+        style: TextStyle(
+          color: Colors.purpleAccent,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      );
     }
     if (ship.busyUntil != null) {
-      // Explicitly check for busy status (repairing/upgrading)
-      return Text(ship.currentTask!.toUpperCase(), style: const TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold));
+      final rawTask = ship.currentTask?.trim().toLowerCase();
+      if (ship.isRepairing) {
+        return const Text(
+          "MAINTENANCE",
+          style: TextStyle(
+            color: Colors.orangeAccent,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        );
+      }
+      final label =
+      (rawTask == null || rawTask.isEmpty) ? "BUSY" : rawTask.toUpperCase();
+      return Text(
+        label,
+        style: const TextStyle(
+          color: Colors.orangeAccent,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      );
     }
+
+    // 3) Critical condition
     if (ship.condition < 0.3) {
-      return const Text("CRITICAL", style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold));
+      return const Text(
+        "CRITICAL",
+        style: TextStyle(
+          color: Colors.redAccent,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      );
     }
-    return const Text("READY", style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold));
+
+    // 4) Default ready
+    return const Text(
+      "READY",
+      style: TextStyle(
+        color: Colors.blueAccent,
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
+      ),
+    );
   }
+
 
   void _showShipDetails(BuildContext context, Ship ship) {
     showModalBottomSheet(

@@ -7,12 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:358044541015:android:3724917631a2b36a2d8312",
+        "mobilesdk_app_id": "1:358044541015:android:8cc606d03838a8c02d8312",
         "android_client_info": {
           "package_name": "com.coreym.mars_osc"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "358044541015-gfp6shrki48a564s0nro5fnh42r3hkoh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.coreym.mars_osc",
+            "certificate_hash": "b0330fb832fbdf807cb0a863a73c14e691751fbc"
+          }
+        },
+        {
+          "client_id": "358044541015-eqmaj7qmjukr857d2jq22e9gim956aba.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAbbmQijLsabLhee2kVTOsSvqX8JvHrS-M"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "358044541015-eqmaj7qmjukr857d2jq22e9gim956aba.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "358044541015-ii7kapj5iuhuqishps3os9rqaag0o1rn.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.yourname.moscGame"
+              }
+            }
+          ]
         }
       }
     }
