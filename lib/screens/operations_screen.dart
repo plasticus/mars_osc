@@ -172,7 +172,7 @@ class ShipSummaryCard extends StatelessWidget {
 
   Widget _buildMissionProgress(Ship ship) {
     return StreamBuilder<int>(
-      stream: Stream.periodic(const Duration(seconds: 5), (i) => i),
+      stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
       builder: (context, snapshot) {
         final now = DateTime.now();
         if (ship.missionEndTime == null) return const SizedBox.shrink();

@@ -10,6 +10,7 @@ class EngineeringScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
 
+
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -45,6 +46,9 @@ class EngineeringScreen extends StatelessWidget {
           icon: Icons.radar,
           currentLevel: state.broadcastingArrayLevel,
           maxLevel: 5,
+          infoLine: state.broadcastingArrayPrestige > 0
+              ? "Bonus Mission Value: +${(state.broadcastingArrayPrestige * 0.1).toStringAsFixed(1)}%"
+              : null,
           upgrades: {
             2: _BaseUpgradeData(7500, "+2 Missions per category"),
             3: _BaseUpgradeData(25000, "+2 Missions per category"),
@@ -52,6 +56,11 @@ class EngineeringScreen extends StatelessWidget {
             5: _BaseUpgradeData(120000, "+2 Missions per category (Max 10/cat)"),
           },
           onUpgrade: (cost) => state.upgradeBase('Broadcasting', cost),
+          prestigeTitle: "Brand Reach",
+          prestigeLevel: state.broadcastingArrayPrestige,
+          prestigeEffect: "+0.1% Mission Value",
+          prestigeCost: state.getBroadcastingArrayPrestigeCost(),
+          onPrestigeUpgrade: () => state.upgradeBroadcastingArrayPrestige(),
         ),
 
         _UpgradeCard(
@@ -59,19 +68,28 @@ class EngineeringScreen extends StatelessWidget {
           icon: Icons.memory,
           currentLevel: state.serverFarmLevel,
           maxLevel: 3,
+          infoLine: "Contract Speed Bonus: +${(state.serverFarmPrestige * 0.1).toStringAsFixed(1)}%",
           upgrades: {
             1: _BaseUpgradeData(8000, "All Fleet AI +0.5"),
             2: _BaseUpgradeData(20000, "All Fleet AI +1.0"),
             3: _BaseUpgradeData(50000, "All Fleet AI +2.0"),
           },
           onUpgrade: (cost) => state.upgradeBase('Server', cost),
+
+          prestigeTitle: "Contract Overclock",
+          prestigeLevel: state.serverFarmPrestige,
+          prestigeEffect: "+0.1% Travel Speed",
+          prestigeCost: state.getServerFarmPrestigeCost(),
+          onPrestigeUpgrade: () => state.upgradeServerFarmPrestige(),
         ),
+
 
         _UpgradeCard(
           title: "Trade Depot / Silos",
           icon: Icons.store,
           currentLevel: state.tradeDepotLevel,
           maxLevel: 5,
+          infoLine: "Max Storage: ${state.maxStorage} m³",
           upgrades: {
             2: _BaseUpgradeData(12000, "Max 1000 m³ + Auto-Sell @ 110%"),
             3: _BaseUpgradeData(35000, "Max 1500 m³ + Auto-Sell @ 115%"),
@@ -90,7 +108,7 @@ class EngineeringScreen extends StatelessWidget {
           // Prestige (only used once base maxed)
           prestigeTitle: "Overflow Storage",
           prestigeLevel: state.tradeDepotPrestige,
-          prestigeEffect: "+100 m³ Max Storage",
+          prestigeEffect: "+100 m³ Storage",
           prestigeCost: state.getTradeDepotPrestigeCost(),
           onPrestigeUpgrade: () => state.upgradeTradeDepotPrestige(),
         ),
@@ -127,6 +145,7 @@ class _UpgradeCard extends StatelessWidget {
   final Function(int) onUpgrade;
   final VoidCallback? onOpen;
   final String? openLabel;
+  final String? infoLine;
 
   // Prestige (optional)
   final String? prestigeTitle;
@@ -149,6 +168,7 @@ class _UpgradeCard extends StatelessWidget {
     this.prestigeEffect,
     this.prestigeCost,
     this.onPrestigeUpgrade,
+    this.infoLine,
   });
 
   @override
@@ -157,12 +177,9 @@ class _UpgradeCard extends StatelessWidget {
 
     final nextLevel = currentLevel + 1;
     final upgradeData = upgrades[nextLevel];
-
     final bool isMaxed = currentLevel >= maxLevel;
-
     final bool hasPrestige =
         prestigeLevel != null && prestigeCost != null && onPrestigeUpgrade != null;
-
     final bool prestigeReady = isMaxed && hasPrestige;
 
     final bool canAffordUpgrade =
@@ -196,6 +213,16 @@ class _UpgradeCard extends StatelessWidget {
             ),
             const Divider(height: 24),
 
+            // Info line always visible when provided
+            if (infoLine != null) ...[
+              Text(
+                infoLine!,
+                style: const TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Open button (like ENTER DEPOT)
             if (onOpen != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16.0),

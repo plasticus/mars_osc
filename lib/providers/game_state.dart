@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Cloud Persistence
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import '../models/ship_model.dart';
 import '../models/mission_model.dart';
@@ -73,7 +73,7 @@ class GameState extends ChangeNotifier {
 
   //Prestige
   int tradeDepotPrestige = 0;
-  int broadcastPrestige = 0;
+  int broadcastingArrayPrestige = 0;
   int serverFarmPrestige = 0;
 
   int get scanArrayLevel => relayLevel;
@@ -93,24 +93,44 @@ class GameState extends ChangeNotifier {
   Future<void> _ensureUserDefaults(String uid) async {
     final ref = FirebaseFirestore.instance.collection('users').doc(uid);
 
-    await ref.set({
-      'companyName': companyName,
-      'hasNamedCompany': hasNamedCompany,
-      'solars': solars,
-      'ore': ore,
-      'gas': gas,
-      'crystals': crystals,
-      'hangarLevel': hangarLevel,
-      'relayLevel': relayLevel,
-      'serverFarmLevel': serverFarmLevel,
-      'tradeDepotLevel': tradeDepotLevel,
-      'repairGantryLevel': repairGantryLevel,
-      'broadcastingArrayLevel': broadcastingArrayLevel,
-      // you can also ensure these exist if you want:
-      // 'fleet': fleet.map((s) => s.toJson()).toList(),
-      // 'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
-    }, SetOptions(merge: true));
+    final snap = await ref.get();
+    final data = snap.data() ?? <String, dynamic>{};
+
+    // Only add fields that are missing
+    final Map<String, dynamic> missing = {};
+
+    void ensure(String key, dynamic value) {
+      if (!data.containsKey(key)) missing[key] = value;
+    }
+
+    ensure('companyName', companyName);
+    ensure('hasNamedCompany', hasNamedCompany);
+
+    ensure('solars', solars);
+    ensure('ore', ore);
+    ensure('gas', gas);
+    ensure('crystals', crystals);
+
+    ensure('hangarLevel', hangarLevel);
+    ensure('relayLevel', relayLevel);
+    ensure('serverFarmLevel', serverFarmLevel);
+    ensure('tradeDepotLevel', tradeDepotLevel);
+    ensure('repairGantryLevel', repairGantryLevel);
+    ensure('broadcastingArrayLevel', broadcastingArrayLevel);
+
+    ensure('tradeDepotPrestige', tradeDepotPrestige);
+    ensure('broadcastingArrayPrestige', broadcastingArrayPrestige);
+    ensure('serverFarmPrestige', serverFarmPrestige);
+
+    if (missing.isNotEmpty) {
+      if (snap.exists) {
+        await ref.update(missing);
+      } else {
+        await ref.set(missing); // creates doc for brand new user
+      }
+    }
   }
+
 
 
   GameState() {
@@ -182,6 +202,10 @@ class GameState extends ChangeNotifier {
         tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
         repairGantryLevel = data['repairGantryLevel'] ?? 0;
         broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
+        // Load prestige levels
+        tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
+        broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
+        serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
 
         if (data['fleet'] != null) {
           final List<dynamic> decodedFleet = data['fleet'];
@@ -211,36 +235,42 @@ class GameState extends ChangeNotifier {
 
   Future<void> signInWithGoogle() async {
     try {
-      // Use the default constructor instead of .standard()
-      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email'],
+      );
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) return;
+
+      if (googleUser == null) {
+        debugPrint("Google Sign-In canceled by user");
+        return;
+      }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
       final AuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
-        accessToken: googleAuth.accessToken, // It's safer to include both for Firebase
+        accessToken: googleAuth.accessToken,
       );
 
       final UserCredential userCredential =
       await FirebaseAuth.instance.signInWithCredential(credential);
 
-      final uid = userCredential.user?.uid;
-      if (uid != null) {
-        await initializeUserSession(uid);
+      if (userCredential.user?.uid != null) {
+        await initializeUserSession(userCredential.user!.uid);
       }
     } catch (e) {
       debugPrint("Google Sign-In Error: $e");
     }
   }
 
-
   Future<void> signOut() async {
     try {
       await FirebaseAuth.instance.signOut();
-      await GoogleSignIn.standard().signOut();
+
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+
       _currentUid = null;
       _isInitialized = false;
       notifyListeners();
@@ -257,7 +287,7 @@ class GameState extends ChangeNotifier {
 
     int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
 
-    // NEW: Add the Engineering investment to the total
+    // Add the Engineering investment to the total
     int engineeringValue = calculateBaseUpgradeInvestment();
     int netWorth = solars + fleetValue + engineeringValue;
 
@@ -271,8 +301,6 @@ class GameState extends ChangeNotifier {
 
     try {
       final batch = FirebaseFirestore.instance.batch();
-
-      // Update main user doc
       final userRef = FirebaseFirestore.instance.collection('users').doc(_currentUid);
       batch.set(userRef, {
         'companyName': companyName,
@@ -283,19 +311,21 @@ class GameState extends ChangeNotifier {
         'gas': gas,
         'crystals': crystals,
 
-        // Facilities / Engineering
+        // Engineering
         'hangarLevel': hangarLevel,
         'relayLevel': relayLevel,
         'serverFarmLevel': serverFarmLevel,
         'tradeDepotLevel': tradeDepotLevel,
         'repairGantryLevel': repairGantryLevel,
         'broadcastingArrayLevel': broadcastingArrayLevel,
-
+        //Leaderboard stuff
         'totalDeliveries': totalDeliveries,
-
-        // If you want true persistence of ships/logs across devices:
         'fleet': fleet.map((s) => s.toJson()).toList(),
         'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
+        // Prestige levels
+        'tradeDepotPrestige': tradeDepotPrestige,
+        'broadcastingArrayPrestige': broadcastingArrayPrestige,
+        'serverFarmPrestige': serverFarmPrestige,
       }, SetOptions(merge: true));
 
 
@@ -512,7 +542,17 @@ class GameState extends ChangeNotifier {
       int speed = max(1, ship.speed);
       double aiMult = max(0.5, 1.0 - (ship.aiLevel * 0.05));
 
-      int seconds = max(5, ((mission.distanceAU / speed) * factor * aiMult).clamp(0, 300).toInt());
+      // 0.1% faster per prestige level => 0.1% less time per level
+      double prestigeTimeMult = 1.0 - (serverFarmPrestige * 0.001);
+      // safety clamp so it never goes negative / ridiculous
+      prestigeTimeMult = prestigeTimeMult.clamp(0.25, 1.0);
+
+      int seconds = max(
+        5,
+        ((mission.distanceAU / speed) * factor * aiMult * prestigeTimeMult)
+            .clamp(0, 300)
+            .toInt(),
+      );
 
       ship.missionEndTime = now.add(Duration(seconds: seconds));
       ship.pendingReward = mission.rewardSolars;
@@ -546,11 +586,25 @@ class GameState extends ChangeNotifier {
     reward = (reward * aiRewardMult * 10).toInt();
     amount = (amount * aiRewardMult * 10).toInt();
 
-    int eliteBonus = ship.isMaxed ? ((reward + (amount * getResourcePrice(ship.pendingResource ?? ''))) * 0.05).toInt() : 0;
-    solars += reward + eliteBonus;
+    int resourceValue = 0;
+    if (ship.pendingResource != null && amount > 0) {
+      resourceValue = amount * getResourcePrice(ship.pendingResource!);
+    }
+    int totalMissionValue = reward + resourceValue;
+
+    int eliteBonus = ship.isMaxed ? (totalMissionValue * 0.05).toInt() : 0;
+
+    // Broadcasting Prestige Bonus: 0.1% per level of total mission value
+    int broadcastBonus = 0;
+    if (broadcastingArrayPrestige > 0) {
+      broadcastBonus = (totalMissionValue * (broadcastingArrayPrestige * 0.001)).round();
+    }
+
+    solars += reward + eliteBonus + broadcastBonus;
 
     String earnings = reward > 0 ? "⁂$reward" : "";
     if (eliteBonus > 0) earnings += (earnings.isEmpty ? "" : " + ") + "⁂$eliteBonus (Elite)";
+    if (broadcastBonus > 0) earnings += (earnings.isEmpty ? "" : " + ") + "⁂$broadcastBonus (Brand Reach)";
 
     if (ship.pendingResource != null && amount > 0) {
       int space = maxStorage - (ore + gas + crystals);
@@ -825,8 +879,6 @@ class GameState extends ChangeNotifier {
   }
 
   int getTradeDepotPrestigeCost() {
-    // Cheap-ish sink; tune anytime
-    // 2000, 2360, 2785, ...
     const base = 2000;
     const growth = 1.18;
     return (base * pow(growth, tradeDepotPrestige)).round();
@@ -852,6 +904,61 @@ class GameState extends ChangeNotifier {
 
     _triggerUpdate(); // this saves + notifyListeners
   }
+
+  int getBroadcastingArrayPrestigeCost() {
+    const base = 2000;
+    const growth = 1.2;
+    return (base * pow(growth, broadcastingArrayPrestige)).round();
+  }
+
+  void upgradeBroadcastingArrayPrestige() {
+    const int maxLevel = 5;
+    if (broadcastingArrayLevel < maxLevel) return;
+
+    final cost = getBroadcastingArrayPrestigeCost();
+    if (solars < cost) return;
+
+    solars -= cost;
+    broadcastingArrayPrestige += 1;
+
+    _addLog(LogEntry(
+      timestamp: DateTime.now(),
+      title: "Broadcasting Prestige",
+      details: "Brand Reach +0.1% (Prestige ${broadcastingArrayPrestige})",
+      solarChange: -cost,
+      isPositive: false,
+    ));
+
+    _triggerUpdate();
+  }
+
+  int getServerFarmPrestigeCost() {
+    const base = 2000;
+    const growth = 1.2;
+    return (base * pow(growth, serverFarmPrestige)).round();
+  }
+
+  void upgradeServerFarmPrestige() {
+    const int maxLevel = 3; // your server farm max
+    if (serverFarmLevel < maxLevel) return;
+
+    final cost = getServerFarmPrestigeCost();
+    if (solars < cost) return;
+
+    solars -= cost;
+    serverFarmPrestige += 1;
+
+    _addLog(LogEntry(
+      timestamp: DateTime.now(),
+      title: "Server Farm Prestige",
+      details: "Contract Speed +0.1% (Prestige $serverFarmPrestige)",
+      solarChange: -cost,
+      isPositive: false,
+    ));
+
+    _triggerUpdate();
+  }
+
 
 
   void sellShip(String id) {
