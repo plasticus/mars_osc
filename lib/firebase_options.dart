@@ -17,13 +17,19 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      return web;
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        return ios;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for ios - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
@@ -46,30 +52,11 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyD8Lz2Fb61GXRNRlpipWw_iIYbO_nVn06k',
-    appId: '1:358044541015:web:b07b255fea3084992d8312',
-    messagingSenderId: '358044541015',
-    projectId: 'mosc-leaderboard',
-    authDomain: 'mosc-leaderboard.firebaseapp.com',
-    storageBucket: 'mosc-leaderboard.firebasestorage.app',
-  );
-
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAbbmQijLsabLhee2kVTOsSvqX8JvHrS-M',
-    appId: '1:358044541015:android:3724917631a2b36a2d8312',
+    appId: '1:358044541015:android:8cc606d03838a8c02d8312',
     messagingSenderId: '358044541015',
     projectId: 'mosc-leaderboard',
     storageBucket: 'mosc-leaderboard.firebasestorage.app',
   );
-
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDmsXjB2ZUrsiigyBRyH_yfYwbwVShod-o',
-    appId: '1:358044541015:ios:4ad06c64e63393292d8312',
-    messagingSenderId: '358044541015',
-    projectId: 'mosc-leaderboard',
-    storageBucket: 'mosc-leaderboard.firebasestorage.app',
-    iosBundleId: 'com.yourname.moscGame',
-  );
-
 }
