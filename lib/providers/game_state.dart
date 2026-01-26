@@ -7,7 +7,6 @@ import 'dart:convert';
 import '../models/ship_model.dart';
 import '../models/mission_model.dart';
 import '../services/mission_service.dart';
-import '../utils/game_formulas.dart';
 import '../models/ship_templates.dart';
 import 'dart:math';
 import 'dart:async';
@@ -212,17 +211,17 @@ class GameState extends ChangeNotifier {
 
   Future<void> signInWithGoogle() async {
     try {
-      // v7: prefer named constructor
-      final GoogleSignIn googleSignIn = GoogleSignIn.standard();
+      // Use the default constructor instead of .standard()
+      final GoogleSignIn googleSignIn = GoogleSignIn();
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-      // v7: accessToken is gone; Firebase Auth can sign in with idToken alone
       final AuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken, // It's safer to include both for Firebase
       );
 
       final UserCredential userCredential =
