@@ -826,6 +826,36 @@ class GameState extends ChangeNotifier {
     }
   }
 
+  int getTradeDepotPrestigeCost() {
+    // Cheap-ish sink; tune anytime
+    // 2000, 2360, 2785, ...
+    const base = 2000;
+    const growth = 1.18;
+    return (base * pow(growth, tradeDepotPrestige)).round();
+  }
+
+  void upgradeTradeDepotPrestige() {
+    const int maxDepotLevel = 5;
+    if (tradeDepotLevel < maxDepotLevel) return;
+
+    final cost = getTradeDepotPrestigeCost();
+    if (solars < cost) return;
+
+    solars -= cost;
+    tradeDepotPrestige += 1;
+
+    _addLog(LogEntry(
+      timestamp: DateTime.now(),
+      title: "Trade Depot Prestige",
+      details: "Overflow Storage +100 m³ (Prestige ${tradeDepotPrestige})",
+      solarChange: -cost,
+      isPositive: false,
+    ));
+
+    _triggerUpdate(); // this saves + notifyListeners
+  }
+
+
   void sellShip(String id) {
     final idx = fleet.indexWhere((s) => s.id == id);
     if (idx != -1 && fleet[idx].missionEndTime == null && fleet[idx].busyUntil == null) {

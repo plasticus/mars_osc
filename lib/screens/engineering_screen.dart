@@ -26,6 +26,7 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Hangar', cost),
         ),
+
         _UpgradeCard(
           title: "Deep-Space Relay",
           icon: Icons.settings_remote,
@@ -38,6 +39,7 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Relay', cost),
         ),
+
         _UpgradeCard(
           title: "Broadcasting Array",
           icon: Icons.radar,
@@ -51,6 +53,7 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Broadcasting', cost),
         ),
+
         _UpgradeCard(
           title: "Neural Server Farm",
           icon: Icons.memory,
@@ -63,6 +66,7 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Server', cost),
         ),
+
         _UpgradeCard(
           title: "Trade Depot / Silos",
           icon: Icons.store,
@@ -76,15 +80,21 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Depot', cost),
           onOpen: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeDepotScreen()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TradeDepotScreen()),
+            );
           },
           openLabel: "ENTER DEPOT",
-          prestigeLevel: state.tradeDepotPrestige,
+
+          // --- Prestige (only shows once base level is max) ---
           prestigeTitle: "Overflow Storage",
+          prestigeLevel: state.tradeDepotPrestige,
           prestigeEffect: "+100 m³ Max Storage",
           prestigeCost: state.getTradeDepotPrestigeCost(),
           onPrestigeUpgrade: () => state.upgradeTradeDepotPrestige(),
         ),
+
         _UpgradeCard(
           title: "Repair Gantry",
           icon: Icons.construction,
@@ -118,9 +128,9 @@ class _UpgradeCard extends StatelessWidget {
   final VoidCallback? onOpen;
   final String? openLabel;
 
-  // --- PRESTIGE (optional) ---
-  final int? prestigeLevel;
+  // --- Prestige (optional) ---
   final String? prestigeTitle;
+  final int? prestigeLevel;
   final String? prestigeEffect;
   final int? prestigeCost;
   final VoidCallback? onPrestigeUpgrade;
@@ -135,9 +145,8 @@ class _UpgradeCard extends StatelessWidget {
     this.onOpen,
     this.openLabel,
 
-    // prestige
-    this.prestigeLevel,
     this.prestigeTitle,
+    this.prestigeLevel,
     this.prestigeEffect,
     this.prestigeCost,
     this.onPrestigeUpgrade,
@@ -145,12 +154,14 @@ class _UpgradeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<GameState>();
+
     final nextLevel = currentLevel + 1;
     final upgradeData = upgrades[nextLevel];
     final bool isMaxed = currentLevel >= maxLevel;
 
-    final state = Provider.of<GameState>(context, listen: false);
-    final bool canAfford = upgradeData != null && state.solars >= upgradeData.cost;
+    final bool canAfford =
+        upgradeData != null && state.solars >= upgradeData.cost;
 
     final bool showPrestige =
         isMaxed && prestigeLevel != null && prestigeCost != null && onPrestigeUpgrade != null;
@@ -169,7 +180,10 @@ class _UpgradeCard extends StatelessWidget {
               children: [
                 Icon(icon, color: Colors.orangeAccent),
                 const SizedBox(width: 12),
-                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 Text("Lv. $currentLevel", style: const TextStyle(color: Colors.grey)),
               ],
@@ -193,9 +207,15 @@ class _UpgradeCard extends StatelessWidget {
               ),
 
             if (!isMaxed && upgradeData != null) ...[
-              Text("Upgrade to Lv $nextLevel:", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                "Upgrade to Lv $nextLevel:",
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const SizedBox(height: 4),
-              Text(upgradeData.effect, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Text(
+                upgradeData.effect,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -210,14 +230,17 @@ class _UpgradeCard extends StatelessWidget {
                 ),
               ),
             ] else ...[
-              const Text("Systems fully operational.", style: TextStyle(color: Colors.greenAccent)),
+              const Text(
+                "Systems fully operational.",
+                style: TextStyle(color: Colors.greenAccent),
+              ),
             ],
 
             if (showPrestige) ...[
               const Divider(height: 28),
               Text(
-                prestigeTitle ?? "Prestige Upgrade",
-                style: const TextStyle(fontSize: 13, color: Colors.grey),
+                prestigeTitle ?? "Prestige",
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 6),
               Text(
@@ -237,76 +260,6 @@ class _UpgradeCard extends StatelessWidget {
                   label: Text("PRESTIGE (⁂${prestigeCost!})"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: canAffordPrestige ? Colors.purple : Colors.blueGrey[800],
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-  @override
-  Widget build(BuildContext context) {
-    final nextLevel = currentLevel + 1;
-    final upgradeData = upgrades[nextLevel];
-    final bool isMaxed = currentLevel >= maxLevel;
-    final state = Provider.of<GameState>(context, listen: false);
-    final bool canAfford = upgradeData != null && state.solars >= upgradeData.cost;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Colors.orangeAccent),
-                const SizedBox(width: 12),
-                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                Text("Lv. $currentLevel", style: const TextStyle(color: Colors.grey)),
-              ],
-            ),
-            const Divider(height: 24),
-            
-            if (onOpen != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: onOpen,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepOrange,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(openLabel ?? "OPEN"),
-                  ),
-                ),
-              ),
-
-            if (isMaxed)
-              const Text("Systems fully operational.", style: TextStyle(color: Colors.greenAccent))
-            else if (upgradeData != null) ...[
-              Text("Upgrade to Lv $nextLevel:", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              const SizedBox(height: 4),
-              Text(upgradeData.effect, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: canAfford ? () => onUpgrade(upgradeData.cost) : null,
-                  icon: const Icon(Icons.arrow_upward, size: 16),
-                  label: Text("UPGRADE (⁂${upgradeData.cost})"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: canAfford ? Colors.blue : Colors.blueGrey[800], // Updated Color
                     foregroundColor: Colors.white,
                   ),
                 ),
