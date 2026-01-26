@@ -72,6 +72,11 @@ class GameState extends ChangeNotifier {
   int broadcastingArrayLevel = 1;
   int totalDeliveries = 0; // Tracks every contract ever finished
 
+  //Prestige
+  tradeDepotPrestige = 0;
+  broadcastPrestige = 0;
+  serverFarmPrestige = 0;
+
   int get scanArrayLevel => relayLevel;
 
   List<Ship> fleet = [];
@@ -272,10 +277,29 @@ class GameState extends ChangeNotifier {
       // Update main user doc
       final userRef = FirebaseFirestore.instance.collection('users').doc(_currentUid);
       batch.set(userRef, {
+        'companyName': companyName,
+        'hasNamedCompany': hasNamedCompany,
+
         'solars': solars,
+        'ore': ore,
+        'gas': gas,
+        'crystals': crystals,
+
+        // Facilities / Engineering
+        'hangarLevel': hangarLevel,
+        'relayLevel': relayLevel,
+        'serverFarmLevel': serverFarmLevel,
+        'tradeDepotLevel': tradeDepotLevel,
+        'repairGantryLevel': repairGantryLevel,
+        'broadcastingArrayLevel': broadcastingArrayLevel,
+
         'totalDeliveries': totalDeliveries,
-        // ... keep existing fields ...
+
+        // If you want true persistence of ships/logs across devices:
+        'fleet': fleet.map((s) => s.toJson()).toList(),
+        'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
       }, SetOptions(merge: true));
+
 
       // 3. Update the Leaderboard with your 4 categories
       final leadRef = FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid);
@@ -625,6 +649,87 @@ class GameState extends ChangeNotifier {
   }
 
   double _lerp(double a, double b, double t) => a + (b - a) * t;
+  // --- TEMPLATE LOOKUPS ---
+  int _getTemplatePrice(String modelName) {
+    try {
+      return ShipTemplate.all.firstWhere((t) => t.modelName == modelName).price;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // --- SHIP UPGRADES (COST + TIME) ---
+  int getUpgradeCost(Ship s, int currentLevel) {
+    // Cost scales with ship model price and how far you’ve pushed the stat.
+    final price = _getTemplatePrice(s.modelName).toDouble();
+
+    // Normalize price to 0..1 using your template range (1k..420k)
+    const minPrice = 1000.0;
+    const maxPrice = 420000.0;
+    final valueNorm = ((log(price.clamp(minPrice, maxPrice)) - log(minPrice)) /
+        (log(maxPrice) - log(minPrice)))
+        .clamp(0.0, 1.0);
+
+    // Base cost: cheap ships ~80, expensive ships ~1500
+    final base = _lerp(80.0, 1500.0, valueNorm);
+
+    // Level scaling: mild exponential so later upgrades cost more
+    final levelFactor = pow(1.22, currentLevel).toDouble();
+
+    return (base * levelFactor).round();
+  }
+
+  Duration getUpgradeDuration(Ship s, int currentLevel) {
+    final price = _getTemplatePrice(s.modelName).toDouble();
+
+    const minPrice = 1000.0;
+    const maxPrice = 420000.0;
+    final valueNorm = ((log(price.clamp(minPrice, maxPrice)) - log(minPrice)) /
+        (log(maxPrice) - log(minPrice)))
+        .clamp(0.0, 1.0);
+
+    // Base seconds: cheap ships ~5s, expensive ships ~45s
+    final baseSeconds = _lerp(5.0, 45.0, valueNorm);
+
+    // Later levels take longer
+    final levelSeconds = baseSeconds * (1.0 + currentLevel * 0.25);
+
+    // Optional: use repair gantry as "better yard tooling" too (speeds upgrades a bit)
+    final seconds = (levelSeconds / repairSpeedMultiplier).round().clamp(3, 600);
+
+    return Duration(seconds: seconds);
+  }
+
+  // --- SINGLE SHIP REPAIR (used by DryDock screen) ---
+  void repairShip(String shipId) {
+    final idx = fleet.indexWhere((s) => s.id == shipId);
+    if (idx == -1) return;
+
+    final s = fleet[idx];
+
+    // Don’t repair if already busy or on mission
+    if (s.busyUntil != null || s.missionEndTime != null) return;
+    if (s.condition >= 1.0) return;
+
+    final cost = getRepairCost(s);
+    if (solars < cost) return;
+
+    solars -= cost;
+    s.isRepairing = true;
+    s.currentTask = 'Repairing';
+    s.busyUntil = DateTime.now().add(getRepairDuration(s));
+
+    _addLog(LogEntry(
+      timestamp: DateTime.now(),
+      title: "Repair Started",
+      details: "${s.nickname} entered dry dock. Cost: ⁂$cost.",
+      solarChange: -cost,
+      isPositive: false,
+    ));
+
+    _triggerUpdate();
+  }
+
 
   void repairAllShips() {
     int total = 0;
