@@ -73,9 +73,9 @@ class GameState extends ChangeNotifier {
   int totalDeliveries = 0; // Tracks every contract ever finished
 
   //Prestige
-  tradeDepotPrestige = 0;
-  broadcastPrestige = 0;
-  serverFarmPrestige = 0;
+  int tradeDepotPrestige = 0;
+  int broadcastPrestige = 0;
+  int serverFarmPrestige = 0;
 
   int get scanArrayLevel => relayLevel;
 
@@ -370,7 +370,7 @@ class GameState extends ChangeNotifier {
   // --- GAME LOGIC ---
 
   int get maxFleetSize => hangarLevel == 1 ? 2 : hangarLevel * 2;
-  int get maxStorage => tradeDepotLevel * 500;
+  int get maxStorage => (tradeDepotLevel * 500) + (tradeDepotPrestige * 100);
 
   bool isClassUnlocked(String shipClass) {
     if (shipClass == 'Mule' || shipClass == 'Sprinter') return true;
