@@ -212,45 +212,44 @@ class GameState extends ChangeNotifier {
 
   Future<void> signInWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      // v7: prefer named constructor
+      final GoogleSignIn googleSignIn = GoogleSignIn.standard();
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // v7: accessToken is gone; Firebase Auth can sign in with idToken alone
       final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-      currentUser = userCredential.user;
+      final UserCredential userCredential =
+      await FirebaseAuth.instance.signInWithCredential(credential);
 
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Authentication Successful",
-        details: "Welcome, ${currentUser?.displayName ?? 'Captain'}.",
-        isPositive: true,
-      ));
-
-      if (currentUser != null) {
-        await initializeUserSession(currentUser!.uid);
+      final uid = userCredential.user?.uid;
+      if (uid != null) {
+        await initializeUserSession(uid);
       }
-
-      notifyListeners();
     } catch (e) {
-      debugPrint("Firebase Auth Error: $e");
+      debugPrint("Google Sign-In Error: $e");
     }
   }
 
-  Future<void> signOut() async {
-    await FirebaseAuth.instance.signOut();
-    await GoogleSignIn().signOut();
-    currentUser = null;
-    _currentUid = null;
 
-    // Reset to guest state or clear
-    await resetProgress();
-    notifyListeners();
+  Future<void> signOut() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      await GoogleSignIn.standard().signOut();
+      _currentUid = null;
+      _isInitialized = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Sign out error: $e");
+    }
   }
+
 
   // --- PERSISTENCE LOGIC (Dual Support) ---
 
