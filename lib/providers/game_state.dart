@@ -538,7 +538,7 @@ class GameState extends ChangeNotifier {
       ship.missionStartTime = now;
       ship.missionDistance = mission.distanceAU;
 
-      double factor = 1920.0 * 0.015;
+      double factor = 2000.0; //dropping her down to normal game speed
       int speed = max(1, ship.speed);
       double aiMult = max(0.5, 1.0 - (ship.aiLevel * 0.05));
 
