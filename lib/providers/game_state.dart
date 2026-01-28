@@ -1111,9 +1111,9 @@ class GameState extends ChangeNotifier {
 
   //New corp name for new users!@#$
   String _generateRandomCompanyName() {
-    final List<String> adjectives = ["Green", "Running", "Divine", "Stellar", "Rusty", "Infinite", "Solar", "Void"];
-    final List<String> nouns = ["Tables", "Planet", "Mining", "Asteroid", "Nebula", "Comet", "Voyager", "Orbit"];
-    final List<String> businessWords = ["Inc.", "Enterprises", "LLC", "Corp", "Solutions", "Group", "Logistics"];
+    final adjectives = ["Heavy", "Deep", "Interstellar", "Prime", "Apex", "Vanguard", "Bulk", "Stellar", "Void", "Infinite", "Solar", "Divine", "Rusty", "Frontier"];
+    final nouns = ["Freight", "Haulage", "Cargo", "Transit", "Relay", "Extraction", "Mineral", "Ore", "Orbit", "Voyager", "Asteroid", "Nebula", "Comet", "Forge", "Vector", "Drift"];
+    final biz = ["Inc.", "Enterprises", "LLC", "Corp", "Solutions", "Group", "Logistics", "Ventures", "Systems"];
 
     final random = Random();
     String adj = adjectives[random.nextInt(adjectives.length)];
