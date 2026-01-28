@@ -50,7 +50,7 @@ class LogEntry {
 
 class GameState extends ChangeNotifier {
   int solars = 50000;
-  String companyName = "New MOSC Branch";
+  String companyName = "ERR: Bypassed Name Function";
   bool hasNamedCompany = false;
 
   // Auth State
@@ -139,7 +139,7 @@ class GameState extends ChangeNotifier {
 
 
   GameState() {
-    // Initial local load for guest mode/startup
+    // Initial local load for faster startup (data is overwritten by Firestore on auth)
     _loadData().then((_) {
       _isInitialized = true;
       if (fleet.isEmpty) {
@@ -194,7 +194,8 @@ class GameState extends ChangeNotifier {
       if (userDoc.exists) {
         final data = userDoc.data()!;
 
-        companyName = data['companyName'] ?? _generateRandomCompanyName();
+        companyName = data['companyName'] ?? "ERR: Cloud Missing Name";
+        //companyName = data['companyName'] ?? _generateRandomCompanyName();
         hasNamedCompany = data['hasNamedCompany'] ?? false;
         solars = data['solars'] ?? 50000;
         ore = data['ore'] ?? 0;
@@ -394,7 +395,8 @@ class GameState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     solars = 50000;
-    companyName = "New MOSC Branch";
+    // companyName = "New MOSC Branch"; // OLD
+    companyName = _generateRandomCompanyName(); // NEW: Keep consistent with random names
     ore = 0; gas = 0; crystals = 0;
     hangarLevel = 1; relayLevel = 1; serverFarmLevel = 0;
     tradeDepotLevel = 1; repairGantryLevel = 0; broadcastingArrayLevel = 1;
@@ -1111,16 +1113,26 @@ class GameState extends ChangeNotifier {
 
   //New corp name for new users!@#$
   String _generateRandomCompanyName() {
-    final adjectives = ["Heavy", "Deep", "Interstellar", "Prime", "Apex", "Vanguard", "Bulk", "Stellar", "Void", "Infinite", "Solar", "Divine", "Rusty", "Frontier"];
-    final nouns = ["Freight", "Haulage", "Cargo", "Transit", "Relay", "Extraction", "Mineral", "Ore", "Orbit", "Voyager", "Asteroid", "Nebula", "Comet", "Forge", "Vector", "Drift"];
-    final biz = ["Inc.", "Enterprises", "LLC", "Corp", "Solutions", "Group", "Logistics", "Ventures", "Systems"];
+    final List<String> adjectives = [
+      "Heavy", "Deep", "Interstellar", "Prime", "Apex", "Vanguard", "Bulk",
+      "Stellar", "Void", "Infinite", "Solar", "Divine", "Rusty", "Frontier"
+    ];
+    final List<String> nouns = [
+      "Freight", "Haulage", "Cargo", "Transit", "Relay", "Extraction",
+      "Mineral", "Ore", "Orbit", "Voyager", "Asteroid", "Nebula", "Comet",
+      "Forge", "Vector", "Drift"
+    ];
+    final List<String> businessWords = [
+      "Inc.", "Enterprises", "LLC", "Corp", "Solutions", "Group",
+      "Logistics", "Consolidated", "Ventures", "Systems", "Combine", "Syndicate"
+    ];
 
     final random = Random();
     String adj = adjectives[random.nextInt(adjectives.length)];
     String noun = nouns[random.nextInt(nouns.length)];
-    String biz = businessWords[random.nextInt(businessWords.length)];
+    String selectedBiz = businessWords[random.nextInt(businessWords.length)];
 
-    return "$adj $noun $biz";
+    return "$adj $noun $selectedBiz";
   }
 
   @override
