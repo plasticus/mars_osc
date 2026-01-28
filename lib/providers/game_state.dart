@@ -90,6 +90,8 @@ class GameState extends ChangeNotifier {
   static const double _timeScalingFactor = 0.54;
   bool isBetaTiming = true;
 
+  DateTime? nextMissionRefresh; // New field for timer
+
   Future<void> _ensureUserDefaults(String uid) async {
     final ref = FirebaseFirestore.instance.collection('users').doc(uid);
 
@@ -121,6 +123,9 @@ class GameState extends ChangeNotifier {
     ensure('tradeDepotPrestige', tradeDepotPrestige);
     ensure('broadcastingArrayPrestige', broadcastingArrayPrestige);
     ensure('serverFarmPrestige', serverFarmPrestige);
+
+    // Ensure timer
+    ensure('nextMissionRefresh', (nextMissionRefresh ?? DateTime.now()).toIso8601String());
 
     if (missing.isNotEmpty) {
       if (snap.exists) {
@@ -189,7 +194,7 @@ class GameState extends ChangeNotifier {
       if (userDoc.exists) {
         final data = userDoc.data()!;
 
-        companyName = data['companyName'] ?? "New MOSC Branch";
+        companyName = data['companyName'] ?? _generateRandomCompanyName();
         hasNamedCompany = data['hasNamedCompany'] ?? false;
         solars = data['solars'] ?? 50000;
         ore = data['ore'] ?? 0;
@@ -206,6 +211,11 @@ class GameState extends ChangeNotifier {
         tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
         broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
         serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
+        
+        // Load Mission Timer
+        if (data['nextMissionRefresh'] != null) {
+          nextMissionRefresh = DateTime.tryParse(data['nextMissionRefresh']);
+        }
 
         if (data['fleet'] != null) {
           final List<dynamic> decodedFleet = data['fleet'];
@@ -219,6 +229,7 @@ class GameState extends ChangeNotifier {
       } else {
         // New User Initialization
         hasNamedCompany = false;
+        companyName = _generateRandomCompanyName();
         solars = 50000;
         _setupStarterShip();
         await _saveData(); // Create initial cloud doc
@@ -326,6 +337,8 @@ class GameState extends ChangeNotifier {
         'tradeDepotPrestige': tradeDepotPrestige,
         'broadcastingArrayPrestige': broadcastingArrayPrestige,
         'serverFarmPrestige': serverFarmPrestige,
+        // Mission Timer
+        'nextMissionRefresh': nextMissionRefresh?.toIso8601String(),
       }, SetOptions(merge: true));
 
 
@@ -361,6 +374,11 @@ class GameState extends ChangeNotifier {
       hangarLevel = prefs.getInt('hangarLevel') ?? 1;
       relayLevel = prefs.getInt('relayLevel') ?? 1;
       hasNamedCompany = prefs.getBool('hasNamedCompany') ?? false;
+      
+      final refreshString = prefs.getString('nextMissionRefresh');
+      if (refreshString != null) {
+        nextMissionRefresh = DateTime.tryParse(refreshString);
+      }
 
       final fleetString = prefs.getString('fleet');
       if (fleetString != null) {
@@ -383,6 +401,7 @@ class GameState extends ChangeNotifier {
     hasNamedCompany = false;
     fleet = [];
     missionLogs = [];
+    nextMissionRefresh = null;
     _setupStarterShip();
     _isInitialized = true;
     notifyListeners();
@@ -428,6 +447,15 @@ class GameState extends ChangeNotifier {
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final now = DateTime.now();
       bool changesMade = false;
+      
+      // Auto-refresh missions
+      if (nextMissionRefresh != null && now.isAfter(nextMissionRefresh!)) {
+        generateNewMissions();
+        changesMade = true;
+      } else if (nextMissionRefresh == null) {
+        // If null (fresh start without load), set it now or generate
+        // Usually generateNewMissions sets it.
+      }
 
       for (var ship in fleet) {
         if (ship.missionEndTime != null && now.isAfter(ship.missionEndTime!)) {
@@ -1040,6 +1068,9 @@ class GameState extends ChangeNotifier {
   /// Refreshes the mission board using the mission service.
   void generateNewMissions() {
     updateMissions(_missionService.generateMissions(relayLevel, broadcastingArrayLevel, fleet));
+    // Set 2 hour timer
+    nextMissionRefresh = DateTime.now().add(const Duration(hours: 2));
+    _triggerUpdate();
   }
 
   /// Calculates total solars spent on upgrading base facilities.
@@ -1076,6 +1107,20 @@ class GameState extends ChangeNotifier {
       case 'Relay': return (10000 * pow(2.5, level)).toInt();
       default: return (2500 * pow(1.8, level)).toInt();
     }
+  }
+
+  //New corp name for new users!@#$
+  String _generateRandomCompanyName() {
+    final List<String> adjectives = ["Green", "Running", "Divine", "Stellar", "Rusty", "Infinite", "Solar", "Void"];
+    final List<String> nouns = ["Tables", "Planet", "Mining", "Asteroid", "Nebula", "Comet", "Voyager", "Orbit"];
+    final List<String> businessWords = ["Inc.", "Enterprises", "LLC", "Corp", "Solutions", "Group", "Logistics"];
+
+    final random = Random();
+    String adj = adjectives[random.nextInt(adjectives.length)];
+    String noun = nouns[random.nextInt(nouns.length)];
+    String biz = businessWords[random.nextInt(businessWords.length)];
+
+    return "$adj $noun $biz";
   }
 
   @override

@@ -5,6 +5,7 @@ import '../models/mission_model.dart';
 import '../models/ship_model.dart';
 import '../utils/game_formulas.dart'; // Import for range calc
 import 'dart:math';
+import 'dart:async';
 
 class MissionBoardScreen extends StatefulWidget {
   const MissionBoardScreen({super.key});
@@ -14,6 +15,9 @@ class MissionBoardScreen extends StatefulWidget {
 }
 
 class _MissionBoardScreenState extends State<MissionBoardScreen> {
+  Timer? _refreshTimer;
+  String _timeUntilRefresh = "--:--";
+
   @override
   void initState() {
     super.initState();
@@ -22,7 +26,35 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
       if (state.availableMissions.isEmpty) {
         state.generateNewMissions();
       }
+      _startTimer(state);
     });
+  }
+
+  void _startTimer(GameState state) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (state.nextMissionRefresh != null) {
+        final remaining = state.nextMissionRefresh!.difference(DateTime.now());
+        if (remaining.isNegative) {
+          // It should have refreshed by game loop, but if not:
+          setState(() => _timeUntilRefresh = "Refreshing...");
+        } else {
+          final hours = remaining.inHours.toString().padLeft(2, '0');
+          final minutes = (remaining.inMinutes % 60).toString().padLeft(2, '0');
+          final seconds = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+          setState(() {
+            _timeUntilRefresh = "$hours:$minutes:$seconds";
+          });
+        }
+      } else {
+         setState(() => _timeUntilRefresh = "--:--");
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   // Returns true if any ship meets requirements AND is not busy
@@ -71,10 +103,13 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
               children: [
                 Text("${state.availableMissions.length} ACTIVE CONTRACTS", 
                   style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                TextButton.icon(
-                  onPressed: () => state.generateNewMissions(),
-                  icon: const Icon(Icons.refresh, size: 14),
-                  label: const Text("REFRESH", style: TextStyle(fontSize: 10)),
+                Row(
+                  children: [
+                    const Icon(Icons.timer, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(_timeUntilRefresh,
+                      style: const TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'Courier')),
+                  ],
                 ),
               ],
             ),
