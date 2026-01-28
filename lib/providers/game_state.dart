@@ -1135,6 +1135,38 @@ class GameState extends ChangeNotifier {
     return "$adj $noun $selectedBiz";
   }
 
+  Future<void> nuclearReset() async {
+    if (_currentUid == null) return;
+
+    try {
+      // 1. Wipe Cloud Firestore
+      await FirebaseFirestore.instance.collection('users').doc(_currentUid).delete();
+      await FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid).delete();
+
+      // 2. Wipe Local SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      // 3. Reset Local State to "Day Zero"
+      solars = 50000;
+      companyName = _generateRandomCompanyName();
+      hasNamedCompany = false;
+      ore = 0; gas = 0; crystals = 0;
+      fleet = [];
+      missionLogs = [];
+
+      _setupStarterShip();
+
+      // 4. Force a cloud save of the fresh state
+      await _saveData();
+
+      notifyListeners();
+      debugPrint("COREY_LOG: Nuclear reset complete. System purged.");
+    } catch (e) {
+      debugPrint("COREY_LOG: Reset failed: $e");
+    }
+  }
+
   @override
   void dispose() {
     _gameTimer?.cancel();
