@@ -1137,31 +1137,19 @@ class GameState extends ChangeNotifier {
 
   Future<void> nuclearReset() async {
     if (_currentUid == null) return;
-
     try {
-      // 1. Wipe Cloud Firestore
+      // 1. Wipe Cloud and Local as before
       await FirebaseFirestore.instance.collection('users').doc(_currentUid).delete();
       await FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid).delete();
-
-      // 2. Wipe Local SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
+      // 2. STOP the game timers so they don't try to save data while we are resetting
+      _gameTimer?.cancel();
+      _marketTimer?.cancel();
+      // 3. LOG OUT - This is the key change
+      await signOut(); // Uses your existing signOut() logic
 
-      // 3. Reset Local State to "Day Zero"
-      solars = 50000;
-      companyName = _generateRandomCompanyName();
-      hasNamedCompany = false;
-      ore = 0; gas = 0; crystals = 0;
-      fleet = [];
-      missionLogs = [];
-
-      _setupStarterShip();
-
-      // 4. Force a cloud save of the fresh state
-      await _saveData();
-
-      notifyListeners();
-      debugPrint("COREY_LOG: Nuclear reset complete. System purged.");
+      debugPrint("COREY_LOG: System Purged and User Logged Out.");
     } catch (e) {
       debugPrint("COREY_LOG: Reset failed: $e");
     }

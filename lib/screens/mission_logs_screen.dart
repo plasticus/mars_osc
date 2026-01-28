@@ -11,7 +11,15 @@ class MissionLogsScreen extends StatelessWidget {
     final logs = state.missionLogs;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Operation Logs")),
+      appBar: AppBar(
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Operation Logs"),
+            Text("v0.9.4-BETA", style: TextStyle(fontSize: 10, color: Colors.white54)),
+          ],
+        ),
+      ),
       body: logs.isEmpty
           ? Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -68,18 +76,21 @@ class MissionLogsScreen extends StatelessWidget {
 
   Widget _buildHiddenResetButton(BuildContext context, GameState state) {
     return Padding(
-      padding: const EdgeInsets.only(top: 40, bottom: 60),
+      padding: const EdgeInsets.only(top: 40, bottom: 80), // Added more bottom padding
       child: Center(
         child: Opacity(
-          opacity: 0.15, // Barely visible to keep it a secret
-          child: TextButton(
-            onPressed: () => _showResetDialog(context, state),
-            child: const Text(
-              "SYSTEM_PURGE_PROTOCOL_v1.0.6",
-              style: TextStyle(
-                  color: Colors.white24,
-                  fontSize: 10,
-                  letterSpacing: 2
+          opacity: 0.8, // CRANKED UP: Change 0.15 to 0.8 for testing
+          child: Container(
+            color: Colors.red.withOpacity(0.2), // ADDED: Slight red box for visibility
+            child: TextButton(
+              onPressed: () => _showResetDialog(context, state),
+              child: const Text(
+                "SYSTEM_PURGE_PROTOCOL_v1.0.6",
+                style: TextStyle(
+                    color: Colors.white, // Changed to white for testing
+                    fontSize: 10,
+                    letterSpacing: 2
+                ),
               ),
             ),
           ),
