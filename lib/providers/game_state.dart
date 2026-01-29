@@ -568,19 +568,17 @@ class GameState extends ChangeNotifier {
       ship.missionStartTime = now;
       ship.missionDistance = mission.distanceAU;
 
-      double factor = 2000.0; //dropping her down to normal game speed
+      double factor = 2000.0; //2000 is just a ballpark guess at what I want, here
       int speed = max(1, ship.speed);
       double aiMult = max(0.5, 1.0 - (ship.aiLevel * 0.05));
 
-      // 0.1% faster per prestige level => 0.1% less time per level
       double prestigeTimeMult = 1.0 - (serverFarmPrestige * 0.001);
-      // safety clamp so it never goes negative / ridiculous
       prestigeTimeMult = prestigeTimeMult.clamp(0.25, 1.0);
 
       int seconds = max(
-        5,
+        30,
         ((mission.distanceAU / speed) * factor * aiMult * prestigeTimeMult)
-            .clamp(0, 300)
+            .clamp(30, 28800) //between 30 seconds and 8 hourrssssssss
             .toInt(),
       );
 
