@@ -11,6 +11,7 @@ import 'screens/mission_board_screen.dart';
 import 'screens/operations_screen.dart';
 import 'screens/corporate_hub_screen.dart'; // Updated import
 import 'screens/engineering_screen.dart';
+import 'screens/new_user_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,24 +56,48 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to the Firebase Auth stream to handle auto-login
+    final state = context.watch<GameState>();
+
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
+        // 1. Waiting for Firebase Auth
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
         if (snapshot.hasData) {
-          // User is authenticated, trigger data load
-          final state = context.read<GameState>();
-          Future.microtask(() => state.initializeUserSession(snapshot.data!.uid));
+          // Trigger the session init if we haven't already
+          if (state.currentUser == null) {
+            Future.microtask(() => state.initializeUserSession(snapshot.data!.uid));
+          }
 
+          // 2. Waiting for GameState to finish the Firestore fetch
+          if (state.isLoading) {
+            return const Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 20),
+                    Text("Establishing Link...", style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // 3. Handle Errors or New Users
+          if (state.initError != null || state.isNewUser) {
+            return const NewUserScreen();
+          }
+
+          // 4. Everything is good, go to the game
           return const MainNavigationScreen();
         }
 
+        // 5. Not logged in at all
         return const LoginScreen();
       },
     );

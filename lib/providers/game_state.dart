@@ -57,6 +57,11 @@ class GameState extends ChangeNotifier {
   User? currentUser;
   String? _currentUid;
 
+  // --- NEW USER FLOW VARIABLES ---
+  bool isNewUser = false;
+  String? initError;
+  bool isLoading = true;
+
   // Resource Inventory
   int ore = 0;
   int gas = 0;
@@ -188,33 +193,36 @@ class GameState extends ChangeNotifier {
   // --- AUTHENTICATION & CLOUD SESSION ---
 
   Future<void> initializeUserSession(String uid) async {
-    if (_currentUid == uid) return;
     _currentUid = uid;
+    isLoading = true;
+    initError = null;
+    notifyListeners();
 
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      // 1. Try to get the user document with a 10-second timeout
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 10));
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
+        await _ensureUserDefaults(uid);
 
-        // NEW LOGIC: We pull the name from the cloud.
-        // If the field is missing for an existing user, we still don't give them a random one yet.
-        // This way, if it's a temp connection issue, we aren't overwriting their real data.
+        // Load existing player data
         companyName = data['companyName'] ?? "Searching Registry...";
-
         hasNamedCompany = data['hasNamedCompany'] ?? false;
         solars = data['solars'] ?? 50000;
         ore = data['ore'] ?? 0;
         gas = data['gas'] ?? 0;
         crystals = data['crystals'] ?? 0;
-
         hangarLevel = data['hangarLevel'] ?? 1;
         relayLevel = data['relayLevel'] ?? 1;
         serverFarmLevel = data['serverFarmLevel'] ?? 0;
         tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
         repairGantryLevel = data['repairGantryLevel'] ?? 0;
         broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
-
         tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
         broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
         serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
@@ -232,22 +240,23 @@ class GameState extends ChangeNotifier {
           final List<dynamic> decodedLogs = data['missionLogs'];
           missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
         }
+
+        isNewUser = false; // They are an existing player
       } else {
-        // ONLY if userDoc.exists is FALSE do we generate the new user data.
-        hasNamedCompany = false;
-        companyName = _generateRandomCompanyName();
-        solars = 50000;
-        _setupStarterShip();
-        await _saveData(); // Create initial cloud doc
+        // 2. NO DOCUMENT FOUND - This is a brand new player
+        isNewUser = true;
+        companyName = _generateRandomCompanyName(); // Pre-generate their cool name
       }
 
-      await _ensureUserDefaults(uid);
-
       _isInitialized = true;
-      notifyListeners();
+
+    } on TimeoutException {
+      initError = "ERR_TIMEOUT: No response from Mars Relay.";
     } catch (e) {
-      debugPrint("Firebase Session Init Error: $e");
-      // If the whole session fails, we stay on "Establishing Link..."
+      initError = "ERR_INITIALIZATION: ${e.toString()}";
+    } finally {
+      isLoading = false;
+      notifyListeners(); // Tell the UI we are done "thinking"
     }
   }
 
