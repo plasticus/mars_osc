@@ -56,6 +56,8 @@ class GameState extends ChangeNotifier {
   // Auth State
   User? currentUser;
   String? _currentUid;
+  User? get user => FirebaseAuth.instance.currentUser;
+  String? get currentUid => _currentUid;
 
   // --- NEW USER FLOW VARIABLES ---
   bool isNewUser = false;
@@ -193,13 +195,15 @@ class GameState extends ChangeNotifier {
   // --- AUTHENTICATION & CLOUD SESSION ---
 
   Future<void> initializeUserSession(String uid) async {
+    // 1. CLAIM THE SESSION IMMEDIATELY (Stops the loop)
+    if (_currentUid == uid) return;
     _currentUid = uid;
+
     isLoading = true;
     initError = null;
     notifyListeners();
 
     try {
-      // 1. Try to get the user document with a 10-second timeout
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -208,9 +212,8 @@ class GameState extends ChangeNotifier {
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
-        await _ensureUserDefaults(uid);
 
-        // Load existing player data
+        // LOAD DATA FIRST
         companyName = data['companyName'] ?? "Searching Registry...";
         hasNamedCompany = data['hasNamedCompany'] ?? false;
         solars = data['solars'] ?? 50000;
@@ -241,22 +244,25 @@ class GameState extends ChangeNotifier {
           missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
         }
 
-        isNewUser = false; // They are an existing player
+        // 2. RUN ENSURE AFTER DATA IS LOADED
+        await _ensureUserDefaults(uid);
+        isNewUser = false;
       } else {
-        // 2. NO DOCUMENT FOUND - This is a brand new player
         isNewUser = true;
-        companyName = _generateRandomCompanyName(); // Pre-generate their cool name
+        companyName = _generateRandomCompanyName();
       }
 
       _isInitialized = true;
 
     } on TimeoutException {
       initError = "ERR_TIMEOUT: No response from Mars Relay.";
+      _currentUid = null; // Reset so they can try again
     } catch (e) {
       initError = "ERR_INITIALIZATION: ${e.toString()}";
+      _currentUid = null; // Reset so they can try again
     } finally {
       isLoading = false;
-      notifyListeners(); // Tell the UI we are done "thinking"
+      notifyListeners();
     }
   }
 

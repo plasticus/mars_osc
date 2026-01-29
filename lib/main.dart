@@ -68,7 +68,7 @@ class AuthWrapper extends StatelessWidget {
 
         if (snapshot.hasData) {
           // Trigger the session init if we haven't already
-          if (state.currentUser == null) {
+          if (state.user != null && state.currentUid == null) {
             Future.microtask(() => state.initializeUserSession(snapshot.data!.uid));
           }
 

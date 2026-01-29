@@ -33,10 +33,10 @@ class NewUserScreen extends StatelessWidget {
                 ),
               ] else ...[
                 // WELCOME VIEW
-                const Text("WELCOME, COMMANDER", style: TextStyle(color: Colors.orangeAccent)),
+                const Text("WELCOME, DIRECTOR", style: TextStyle(color: Colors.orangeAccent)),
                 const SizedBox(height: 30),
                 const Text(
-                  "You have been granted ⁂50,000 Solars to establish a new shipping branch in the asteroid belt.",
+                  "You have been granted ⁂50,000 Solars to establish a new shipping outfit in Martian orbit.",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70),
                 ),
