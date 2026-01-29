@@ -204,7 +204,7 @@ class ShipSummaryCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("MISSION PROGRESS", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const Text("CONTRACT PROGRESS", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
                   Text(timeStr, style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.purpleAccent)),
                 ],
               ),

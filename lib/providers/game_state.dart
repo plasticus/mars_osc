@@ -56,6 +56,7 @@ class GameState extends ChangeNotifier {
   // Auth State
   User? currentUser;
   String? _currentUid;
+
   User? get user => FirebaseAuth.instance.currentUser;
   String? get currentUid => _currentUid;
 
@@ -1061,6 +1062,7 @@ class GameState extends ChangeNotifier {
   void setInitialCompanyName(String name) {
     companyName = name;
     hasNamedCompany = true;
+    isNewUser = false;
     _triggerUpdate();
   }
 
@@ -1167,18 +1169,26 @@ class GameState extends ChangeNotifier {
   Future<void> nuclearReset() async {
     if (_currentUid == null) return;
     try {
-      // 1. Wipe Cloud and Local as before
+      // 1. Wipe Cloud and Local
       await FirebaseFirestore.instance.collection('users').doc(_currentUid).delete();
       await FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid).delete();
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
-      // 2. STOP the game timers so they don't try to save data while we are resetting
+
+      // 2. STOP the game timers
       _gameTimer?.cancel();
       _marketTimer?.cancel();
-      // 3. LOG OUT - This is the key change
-      await signOut(); // Uses your existing signOut() logic
 
-      debugPrint("COREY_LOG: System Purged and User Logged Out.");
+      // 3. NEW: WIPE MEMORY
+      fleet = [];
+      missionLogs = [];
+      availableMissions = [];
+      _isInitialized = false;
+
+      // 4. LOG OUT
+      await signOut();
+
+      debugPrint("COREY_LOG: System Purged and Memory Wiped.");
     } catch (e) {
       debugPrint("COREY_LOG: Reset failed: $e");
     }

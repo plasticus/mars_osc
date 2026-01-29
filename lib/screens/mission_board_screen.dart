@@ -334,16 +334,55 @@ class MissionCard extends StatelessWidget {
                       enabled: error == null && !isBusy,
                       leading: Icon(Icons.rocket_launch,
                           color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]),
-                      title: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(error ?? (isBusy ? "System Busy" : "Flight Ready"),
-                        style: TextStyle(color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent, fontSize: 12)),
+                      title: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Status Text
+                          Text(error ?? (isBusy ? "System Busy" : "Flight Ready"),
+                            style: TextStyle(
+                                color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent,
+                                fontSize: 12
+                            ),
+                          ),
+
+                          // NEW: Estimated Flight Time
+                          if (error == null && !isBusy) ...[
+                            Builder(builder: (context) {
+                              // 1. Replicate the GameState math
+                              double factor = 2000.0;
+                              double aiMult = (1.0 - (ship.aiLevel * 0.05)).clamp(0.5, 1.0);
+                              double prestigeMult = (1.0 - (state.serverFarmPrestige * 0.001)).clamp(0.25, 1.0);
+
+                              int totalSeconds = ((mission.distanceAU / ship.speed) * factor * aiMult * prestigeMult)
+                                  .clamp(30, 28800)
+                                  .toInt();
+
+                              // 2. Format into Hours and Minutes
+                              final duration = Duration(seconds: totalSeconds);
+                              String timeStr = "";
+                              if (duration.inHours > 0) {
+                                timeStr += "${duration.inHours}h ";
+                              }
+                              timeStr += "${duration.inMinutes % 60}m";
+
+                              return Text("Est. Transit: $timeStr",
+                                  style: TextStyle(color: Colors.grey[400], fontSize: 11));
+                            }),
+                          ],
+                        ],
+                      ),
                       trailing: (error == null && !isBusy)
                           ? ElevatedButton(
                         onPressed: () {
                           state.startMission(ship.id, mission);
-                          Navigator.pop(context);
+                          Navigator.of(context).pop();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} is away.")),
+                            SnackBar(
+                              content: Text("${ship.nickname} has been deployed!"),
+                              backgroundColor: Colors.deepOrange[900],
+                            ),
                           );
                         },
                         child: const Text("LAUNCH"),
