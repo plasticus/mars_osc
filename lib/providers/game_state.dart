@@ -633,8 +633,8 @@ class GameState extends ChangeNotifier {
     solars += reward + eliteBonus + broadcastBonus;
 
     String earnings = reward > 0 ? "⁂$reward" : "";
-    if (eliteBonus > 0) earnings += (earnings.isEmpty ? "" : " + ") + "⁂$eliteBonus (Elite)";
-    if (broadcastBonus > 0) earnings += (earnings.isEmpty ? "" : " + ") + "⁂$broadcastBonus (Brand Reach)";
+    if (eliteBonus > 0) earnings += "${earnings.isEmpty ? "" : " + "}⁂$eliteBonus (Elite)";
+    if (broadcastBonus > 0) earnings += "${earnings.isEmpty ? "" : " + "}⁂$broadcastBonus (Brand Reach)";
 
     if (ship.pendingResource != null && amount > 0) {
       int space = maxStorage - (ore + gas + crystals);
@@ -648,7 +648,7 @@ class GameState extends ChangeNotifier {
       }
 
       String icon = ship.pendingResource == 'Ore' ? "🏔️" : (ship.pendingResource == 'Gas' ? "☁️" : "💎");
-      earnings += (earnings.isEmpty ? "" : " + ") + "$toStore m³ $icon ${ship.pendingResource}";
+      earnings += "${earnings.isEmpty ? "" : " + "}$toStore m³ $icon ${ship.pendingResource}";
 
       if (overflow > 0) {
         int val = (overflow * getResourcePrice(ship.pendingResource!) * 0.75).toInt();
@@ -843,8 +843,9 @@ class GameState extends ChangeNotifier {
     int cost = getUpgradeCost(s, cur);
     if (solars >= cost && cur < mx) {
       solars -= cost;
-      if (stat == 'speed') s.speed++;
-      else if (stat == 'cargo') s.cargoCapacity++;
+      if (stat == 'speed') {
+        s.speed++;
+      } else if (stat == 'cargo') s.cargoCapacity++;
       else if (stat == 'fuel') s.fuelCapacity++;
       else if (stat == 'shield') s.shieldLevel++;
       else if (stat == 'ai') s.aiLevel++;
@@ -896,8 +897,9 @@ class GameState extends ChangeNotifier {
   void upgradeBase(String type, int cost) {
     if (solars >= cost) {
       solars -= cost;
-      if (type == 'Hangar') hangarLevel++;
-      else if (type == 'Relay') relayLevel++;
+      if (type == 'Hangar') {
+        hangarLevel++;
+      } else if (type == 'Relay') relayLevel++;
       else if (type == 'Server') serverFarmLevel++;
       else if (type == 'Depot') tradeDepotLevel++;
       else if (type == 'Gantry') repairGantryLevel++;
@@ -927,7 +929,7 @@ class GameState extends ChangeNotifier {
     _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Trade Depot Prestige",
-      details: "Overflow Storage +100 m³ (Prestige ${tradeDepotPrestige})",
+      details: "Overflow Storage +100 m³ (Prestige $tradeDepotPrestige)",
       solarChange: -cost,
       isPositive: false,
     ));
@@ -954,7 +956,7 @@ class GameState extends ChangeNotifier {
     _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Broadcasting Prestige",
-      details: "Brand Reach +0.1% (Prestige ${broadcastingArrayPrestige})",
+      details: "Brand Reach +0.1% (Prestige $broadcastingArrayPrestige)",
       solarChange: -cost,
       isPositive: false,
     ));

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_state.dart';
 import '../models/mission_model.dart';
-import '../models/ship_model.dart';
 import '../utils/game_formulas.dart'; // Import for range calc
 import 'dart:math';
 import 'dart:async';
@@ -210,8 +209,11 @@ class MissionCard extends StatelessWidget {
     
     String rewardStr = "⁂ ${mission.rewardSolars}";
     if (mission.rewardResource != null && mission.rewardResourceAmount > 0) {
-      if (mission.rewardSolars > 0) rewardStr += " + ";
-      else rewardStr = "";
+      if (mission.rewardSolars > 0) {
+        rewardStr += " + ";
+      } else {
+        rewardStr = "";
+      }
       rewardStr += "${mission.rewardResourceAmount} ${mission.rewardResource}";
     }
 
