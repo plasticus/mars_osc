@@ -50,7 +50,7 @@ class LogEntry {
 
 class GameState extends ChangeNotifier {
   int solars = 50000;
-  String companyName = "ERR: Bypassed Name Function";
+  String companyName = "Establishing Link...";
   bool hasNamedCompany = false;
 
   // Auth State
@@ -105,7 +105,10 @@ class GameState extends ChangeNotifier {
       if (!data.containsKey(key)) missing[key] = value;
     }
 
-    ensure('companyName', companyName);
+   // Only save to cloud if we have a real name, not a loading message
+    if (companyName != "Establishing Link..." && companyName != "Searching Registry...") {
+      ensure('companyName', companyName);
+    }
     ensure('hasNamedCompany', hasNamedCompany);
 
     ensure('solars', solars);
@@ -194,8 +197,11 @@ class GameState extends ChangeNotifier {
       if (userDoc.exists) {
         final data = userDoc.data()!;
 
-        companyName = data['companyName'] ?? "ERR: Cloud Missing Name";
-        //companyName = data['companyName'] ?? _generateRandomCompanyName();
+        // NEW LOGIC: We pull the name from the cloud.
+        // If the field is missing for an existing user, we still don't give them a random one yet.
+        // This way, if it's a temp connection issue, we aren't overwriting their real data.
+        companyName = data['companyName'] ?? "Searching Registry...";
+
         hasNamedCompany = data['hasNamedCompany'] ?? false;
         solars = data['solars'] ?? 50000;
         ore = data['ore'] ?? 0;
@@ -208,12 +214,11 @@ class GameState extends ChangeNotifier {
         tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
         repairGantryLevel = data['repairGantryLevel'] ?? 0;
         broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
-        // Load prestige levels
+
         tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
         broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
         serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
-        
-        // Load Mission Timer
+
         if (data['nextMissionRefresh'] != null) {
           nextMissionRefresh = DateTime.tryParse(data['nextMissionRefresh']);
         }
@@ -228,7 +233,7 @@ class GameState extends ChangeNotifier {
           missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
         }
       } else {
-        // New User Initialization
+        // ONLY if userDoc.exists is FALSE do we generate the new user data.
         hasNamedCompany = false;
         companyName = _generateRandomCompanyName();
         solars = 50000;
@@ -242,6 +247,7 @@ class GameState extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("Firebase Session Init Error: $e");
+      // If the whole session fails, we stay on "Establishing Link..."
     }
   }
 
