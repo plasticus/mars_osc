@@ -1067,11 +1067,19 @@ class GameState extends ChangeNotifier {
     _triggerUpdate();
   }
 
-  /// Refreshes the mission board using the mission service.
+  /// Refreshes the mission board using the mission service. Should update every 2 hours, via clock
   void generateNewMissions() {
     updateMissions(_missionService.generateMissions(relayLevel, broadcastingArrayLevel, fleet));
-    // Set 2 hour timer
-    nextMissionRefresh = DateTime.now().add(const Duration(hours: 2));
+    final now = DateTime.now();
+    int currentHour = now.hour;
+    int nextHour = (currentHour % 2 == 0) ? currentHour + 2 : currentHour + 1;
+    // 3. Handle midnight wrap-around
+    if (nextHour >= 24) {
+      final tomorrow = now.add(const Duration(days: 1));
+      nextMissionRefresh = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0);
+    } else {
+      nextMissionRefresh = DateTime(now.year, now.month, now.day, nextHour, 0, 0);
+    }
     _triggerUpdate();
   }
 
