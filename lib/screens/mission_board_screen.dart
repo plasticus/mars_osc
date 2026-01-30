@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_state.dart';
 import '../models/mission_model.dart';
-import '../utils/game_formulas.dart'; // Import for range calc
+import '../utils/game_formulas.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -34,7 +34,6 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
       if (state.nextMissionRefresh != null) {
         final remaining = state.nextMissionRefresh!.difference(DateTime.now());
         if (remaining.isNegative) {
-          // It should have refreshed by game loop, but if not:
           setState(() => _timeUntilRefresh = "Refreshing...");
         } else {
           final hours = remaining.inHours.toString().padLeft(2, '0');
@@ -45,7 +44,7 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
           });
         }
       } else {
-         setState(() => _timeUntilRefresh = "--:--");
+        setState(() => _timeUntilRefresh = "--:--");
       }
     });
   }
@@ -56,7 +55,6 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
     super.dispose();
   }
 
-  // Returns true if any ship meets requirements AND is not busy
   bool _canAnyShipDoMissionNow(GameState state, Mission mission) {
     for (var ship in state.fleet) {
       bool isBusy = ship.missionEndTime != null || ship.busyUntil != null;
@@ -68,7 +66,7 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
   }
 
   int _estimateMissionValue(Mission mission) {
-    int val = mission.rewardSolars;
+    int val = mission.rewardSolars * 5; // Updated to match balance
     if (mission.rewardResource != null) {
       int price = 0;
       switch(mission.rewardResource) {
@@ -76,7 +74,7 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
         case 'Gas': price = 25; break;
         case 'Crystals': price = 100; break;
       }
-      val += (mission.rewardResourceAmount * price);
+      val += (mission.rewardResourceAmount * 5 * price);
     }
     return val;
   }
@@ -100,14 +98,14 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("${state.availableMissions.length} ACTIVE CONTRACTS", 
-                  style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+                Text("${state.availableMissions.length} ACTIVE CONTRACTS",
+                    style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
                 Row(
                   children: [
                     const Icon(Icons.timer, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
                     Text(_timeUntilRefresh,
-                      style: const TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'Courier')),
+                        style: const TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'Courier')),
                   ],
                 ),
               ],
@@ -117,21 +115,17 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
             child: TabBarView(
               children: shipClasses.map((className) {
                 final classMissions = state.availableMissions.where((m) => m.requiredClass == className).toList();
-                
+
                 classMissions.sort((a, b) {
                   bool aDoable = _canAnyShipDoMissionNow(state, a);
                   bool bDoable = _canAnyShipDoMissionNow(state, b);
-                  
-                  if (aDoable && !bDoable) return -1; 
+                  if (aDoable && !bDoable) return -1;
                   if (!aDoable && bDoable) return 1;
-
-                  int valA = _estimateMissionValue(a);
-                  int valB = _estimateMissionValue(b);
-                  return valB.compareTo(valA);
+                  return _estimateMissionValue(b).compareTo(_estimateMissionValue(a));
                 });
 
                 if (classMissions.isEmpty) {
-                  return const Center(child: Text("No contracts available for this class.", style: TextStyle(color: Colors.grey)));
+                  return const Center(child: Text("No contracts available.", style: TextStyle(color: Colors.grey)));
                 }
 
                 return ListView.builder(
@@ -140,36 +134,25 @@ class _MissionBoardScreenState extends State<MissionBoardScreen> {
                   itemBuilder: (context, index) {
                     final mission = classMissions[index];
                     final bool isDoable = _canAnyShipDoMissionNow(state, mission);
-                    
-                    // Fleet Stats Analysis for red highlighting
+
                     int maxShield = 0;
                     int maxCargo = 0;
                     double maxRange = 0.0;
-                    
+
                     for (var s in state.fleet.where((s) => s.shipClass == mission.requiredClass)) {
-                       maxShield = max(maxShield, s.shieldLevel);
-                       maxCargo = max(maxCargo, s.cargoCapacity);
-                       
-                       double effRange = GameFormulas.getEffectiveRange(s.fuelCapacity, s.aiLevel);
-                       maxRange = max(maxRange, effRange);
-                    }
-                    
-                    bool shieldFail = maxShield < mission.minShieldLevel;
-                    bool cargoFail = maxCargo < mission.minCargo;
-                    
-                    // Check if fleet Max Range is less than Required Range for this mission
-                    int requiredRange = GameFormulas.getRangeRequired(mission.distanceAU);
-                    bool rangeFail = maxRange < requiredRange;
-                    
-                    if (!state.fleet.any((s) => s.shipClass == mission.requiredClass)) {
-                       shieldFail = true; cargoFail = true; rangeFail = true;
+                      maxShield = max(maxShield, s.shieldLevel);
+                      maxCargo = max(maxCargo, s.cargoCapacity);
+                      maxRange = max(maxRange, GameFormulas.getEffectiveRange(s.fuelCapacity, s.aiLevel));
                     }
 
+                    int requiredRange = GameFormulas.getRangeRequired(mission.distanceAU);
+                    bool rangeFail = maxRange < requiredRange;
+
                     return MissionCard(
-                      mission: mission, 
+                      mission: mission,
                       isDoable: isDoable,
-                      shieldFail: shieldFail,
-                      cargoFail: cargoFail,
+                      shieldFail: maxShield < mission.minShieldLevel,
+                      cargoFail: maxCargo < mission.minCargo,
                       rangeFail: rangeFail,
                       requiredRange: requiredRange,
                     );
@@ -193,8 +176,8 @@ class MissionCard extends StatelessWidget {
   final int requiredRange;
 
   const MissionCard({
-    super.key, 
-    required this.mission, 
+    super.key,
+    required this.mission,
     required this.isDoable,
     this.shieldFail = false,
     this.cargoFail = false,
@@ -206,15 +189,16 @@ class MissionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color mainColor = isDoable ? Colors.deepOrange : Colors.grey;
     final Color textColor = isDoable ? Colors.white : Colors.grey;
-    
-    String rewardStr = "⁂ ${mission.rewardSolars}";
+
+    int baseReward = GameFormulas.calculateSolarReward(
+      baseReward: mission.rewardSolars,
+      aiLevel: 0,
+      isElite: false,
+      shipClass: mission.requiredClass,
+    );
+    String rewardStr = "⁂ $baseReward";
     if (mission.rewardResource != null && mission.rewardResourceAmount > 0) {
-      if (mission.rewardSolars > 0) {
-        rewardStr += " + ";
-      } else {
-        rewardStr = "";
-      }
-      rewardStr += "${mission.rewardResourceAmount} ${mission.rewardResource}";
+      rewardStr += " + ${mission.rewardResourceAmount * 5} ${mission.rewardResource}";
     }
 
     return Card(
@@ -223,7 +207,7 @@ class MissionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         side: isDoable ? BorderSide.none : BorderSide(color: Colors.grey.withOpacity(0.2)),
       ),
-      color: isDoable ? null : Colors.black12, 
+      color: isDoable ? null : Colors.black12,
       child: ExpansionTile(
         iconColor: mainColor,
         collapsedIconColor: mainColor,
@@ -231,10 +215,7 @@ class MissionCard extends StatelessWidget {
           backgroundColor: mainColor.withOpacity(0.1),
           child: Icon(Icons.assignment_outlined, color: mainColor, size: 20),
         ),
-        title: Text(
-          mission.title, 
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)
-        ),
+        title: Text(mission.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
         subtitle: Text(
           "${mission.distanceAU.toStringAsFixed(2)} AU | $rewardStr",
           style: TextStyle(fontSize: 11, color: isDoable ? Colors.grey : Colors.grey[700]),
@@ -251,27 +232,9 @@ class MissionCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _RequirementChip(
-                      icon: Icons.shield, 
-                      label: "SHD", 
-                      value: "${mission.minShieldLevel}", 
-                      active: isDoable,
-                      failed: shieldFail
-                    ),
-                    _RequirementChip(
-                      icon: Icons.inventory_2, 
-                      label: "CRG", 
-                      value: "${mission.minCargo}", 
-                      active: isDoable,
-                      failed: cargoFail
-                    ),
-                    _RequirementChip(
-                      icon: Icons.local_gas_station,
-                      label: "FUEL REQ", 
-                      value: "$requiredRange", 
-                      active: isDoable,
-                      failed: rangeFail
-                    ),
+                    _RequirementChip(icon: Icons.shield, label: "SHD", value: "${mission.minShieldLevel}", active: isDoable, failed: shieldFail),
+                    _RequirementChip(icon: Icons.inventory_2, label: "CRG", value: "${mission.minCargo}", active: isDoable, failed: cargoFail),
+                    _RequirementChip(icon: Icons.local_gas_station, label: "FUEL REQ", value: "$requiredRange", active: isDoable, failed: rangeFail),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -283,9 +246,8 @@ class MissionCard extends StatelessWidget {
                       backgroundColor: Colors.deepOrange[900],
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: Colors.white10,
-                      disabledForegroundColor: Colors.grey[700],
                     ),
-                    child: Text(isDoable ? "ASSIGN SHIP & LAUNCH" : "FLEET BUSY / INCAPABLE"),
+                    child: Text(isDoable ? "ASSIGN SHIP & LAUNCH" : "FLEET INCAPABLE"),
                   ),
                 ),
               ],
@@ -298,15 +260,12 @@ class MissionCard extends StatelessWidget {
 
   void _selectShipForMission(BuildContext context) {
     final state = Provider.of<GameState>(context, listen: false);
-
     final compatibleClassShips = state.fleet.where((s) => s.shipClass == mission.requiredClass).toList();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(24),
@@ -315,12 +274,7 @@ class MissionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(mission.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text("Class: ${mission.requiredClass} | Distance: ${mission.distanceAU.toStringAsFixed(2)} AU",
-                  style: const TextStyle(color: Colors.grey)),
               const Divider(height: 32),
-              Text("COMPATIBLE ${mission.requiredClass.toUpperCase()} SHIPS", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orangeAccent)),
-              const SizedBox(height: 16),
               Expanded(
                 child: ListView.builder(
                   itemCount: compatibleClassShips.length,
@@ -332,45 +286,38 @@ class MissionCard extends StatelessWidget {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       enabled: error == null && !isBusy,
-                      leading: Icon(Icons.rocket_launch,
-                          color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]),
-                      title: Text("${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      leading: Icon(Icons.rocket_launch, color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]),
+                      title: Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Status Text
                           Text(error ?? (isBusy ? "System Busy" : "Flight Ready"),
-                            style: TextStyle(
-                                color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent,
-                                fontSize: 12
-                            ),
-                          ),
-
-                          // NEW: Estimated Flight Time
-                          if (error == null && !isBusy) ...[
+                              style: TextStyle(color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent, fontSize: 12)),
+                          if (error == null && !isBusy)
                             Builder(builder: (context) {
-                              // 1. Replicate the GameState math
+                              // Transit and Reward Logic
                               double factor = 2000.0;
                               double aiMult = (1.0 - (ship.aiLevel * 0.05)).clamp(0.5, 1.0);
                               double prestigeMult = (1.0 - (state.serverFarmPrestige * 0.001)).clamp(0.25, 1.0);
-
-                              int totalSeconds = ((mission.distanceAU / ship.speed) * factor * aiMult * prestigeMult)
-                                  .clamp(30, 28800)
-                                  .toInt();
-
-                              // 2. Format into Hours and Minutes
+                              int totalSeconds = ((mission.distanceAU / ship.speed) * factor * aiMult * prestigeMult).clamp(30, 28800).toInt();
                               final duration = Duration(seconds: totalSeconds);
-                              String timeStr = "";
-                              if (duration.inHours > 0) {
-                                timeStr += "${duration.inHours}h ";
-                              }
-                              timeStr += "${duration.inMinutes % 60}m";
 
-                              return Text("Est. Transit: $timeStr",
-                                  style: TextStyle(color: Colors.grey[400], fontSize: 11));
+                              double shipAiMult = 1.0 + (ship.aiLevel * 0.05);
+                              int estimatedPayout = GameFormulas.calculateSolarReward(
+                                baseReward: mission.rewardSolars,
+                                aiLevel: ship.aiLevel,
+                                isElite: ship.isMaxed,
+                                shipClass: ship.shipClass,
+                              );
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("Est. Transit: ${duration.inHours}h ${duration.inMinutes % 60}m", style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                                  Text("Est. Payout: ⁂$estimatedPayout", style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                                ],
+                              );
                             }),
-                          ],
                         ],
                       ),
                       trailing: (error == null && !isBusy)
@@ -379,15 +326,12 @@ class MissionCard extends StatelessWidget {
                           state.startMission(ship.id, mission);
                           Navigator.of(context).pop();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text("${ship.nickname} has been deployed!"),
-                              backgroundColor: Colors.deepOrange[900],
-                            ),
+                            SnackBar(content: Text("${ship.nickname} deployed!"), backgroundColor: Colors.deepOrange[900]),
                           );
                         },
                         child: const Text("LAUNCH"),
                       )
-                          : const Icon(Icons.lock_outline, size: 16, color: Colors.grey),
+                          : const Icon(Icons.lock_outline, size: 16),
                     );
                   },
                 ),
@@ -408,23 +352,16 @@ class _RequirementChip extends StatelessWidget {
   final bool failed;
 
   const _RequirementChip({
-    required this.icon, 
-    required this.label, 
-    required this.value, 
+    required this.icon,
+    required this.label,
+    required this.value,
     required this.active,
     this.failed = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    Color iconColor = active ? Colors.orangeAccent : Colors.grey;
-    Color? textColor = active ? null : Colors.grey;
-    
-    if (failed) {
-      iconColor = Colors.deepOrange; // Updated to Orange
-      textColor = Colors.deepOrange;
-    }
-
+    Color iconColor = failed ? Colors.deepOrange : (active ? Colors.orangeAccent : Colors.grey);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -439,7 +376,7 @@ class _RequirementChip extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+              Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: failed ? Colors.deepOrange : null)),
               Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
             ],
           ),

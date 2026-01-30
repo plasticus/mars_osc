@@ -3,6 +3,9 @@ class Ship {
   String nickname;
   final String modelName;
   final String shipClass;
+  String? currentMissionName;   // To track "Lunar Ice Run", etc.
+  String? pendingResourceType;  // To track "Ore", "Gas", or "Crystals"
+  bool renameLocked = false;    // The Legacy Designation lock we talked about
 
   // Current Stats
   int speed;
@@ -97,11 +100,14 @@ class Ship {
       'pendingResourceAmount': pendingResourceAmount,
       'isRepairing': isRepairing,
       'hasBeenRenamed': hasBeenRenamed,
+      'currentMissionName': currentMissionName,
+      'pendingResourceType': pendingResourceType,
+      'renameLocked': renameLocked,
     };
   }
 
   factory Ship.fromJson(Map<String, dynamic> json) {
-    return Ship(
+    final ship = Ship(
       id: json['id'],
       nickname: json['nickname'],
       modelName: json['modelName'],
@@ -128,5 +134,9 @@ class Ship {
       isRepairing: json['isRepairing'] ?? false,
       hasBeenRenamed: json['hasBeenRenamed'] ?? false,
     );
+    ship.currentMissionName = json['currentMissionName'];
+    ship.pendingResourceType = json['pendingResourceType'];
+    ship.renameLocked = json['renameLocked'] ?? false;
+    return ship;
   }
 }

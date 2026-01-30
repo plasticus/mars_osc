@@ -56,8 +56,6 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<GameState>();
-
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
@@ -67,34 +65,44 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
+          // Use read instead of watch to avoid rebuilding on every GameState change
+          final state = context.read<GameState>();
+
           // Trigger the session init if we haven't already
           if (state.user != null && state.currentUid == null) {
             Future.microtask(() => state.initializeUserSession(snapshot.data!.uid));
           }
 
-          // 2. Waiting for GameState to finish the Firestore fetch
-          if (state.isLoading) {
-            return const Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 20),
-                    Text("Establishing Link...", style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              ),
-            );
-          }
+          // For checking loading/error state, we need a separate consumer
+          return Consumer<GameState>(
+            builder: (context, state, child) {
+              // 2. Waiting for GameState to finish the Firestore fetch
+              if (state.isLoading) {
+                return const Scaffold(
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 20),
+                        Text("Establishing Link...", style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                );
+              }
 
-          // 3. Handle Errors or New Users
-          if (state.initError != null || state.isNewUser) {
-            return const NewUserScreen();
-          }
+              // 3. Handle Errors or New Users
+              if (state.initError != null || state.isNewUser) {
+                return const NewUserScreen();
+              }
 
-          // 4. Everything is good, go to the game
-          return const MainNavigationScreen();
+              // 4. Everything is good, go to the game
+              // This will only be created ONCE, not on every GameState update
+              return child!;
+            },
+            child: const MainNavigationScreen(),
+          );
         }
 
         // 5. Not logged in at all
@@ -111,8 +119,11 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen> with AutomaticKeepAliveClientMixin {
   int _selectedIndex = 0;
+
+  @override
+  bool get wantKeepAlive => true;
 
   // Updated titles for the AppBar
   final List<String> _titles = [
@@ -125,6 +136,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final state = context.watch<GameState>();
 
     // Updated screen list to include the new Hub

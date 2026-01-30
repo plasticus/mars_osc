@@ -8,6 +8,7 @@ import '../models/ship_model.dart';
 import '../models/mission_model.dart';
 import '../services/mission_service.dart';
 import '../models/ship_templates.dart';
+import '../utils/game_formulas.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -572,12 +573,35 @@ class GameState extends ChangeNotifier {
         details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} maintenance finished. Hull at 100%.",
       ));
     } else if (ship.currentTask == 'Upgrading') {
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "Upgrade Installed",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} systems have been enhanced.",
-      ));
+      // Check if this specific upgrade pushed the ship to Elite status
+      if (ship.isMaxed) {
+        // 1. LEGACY DESIGNATION: Rename if it still has a default name
+        if (!ship.hasBeenRenamed) {
+          String oldName = ship.nickname;
+          ship.nickname = GameFormulas.generateLegacyName();
+          ship.hasBeenRenamed = true; // Mark as renamed so it doesn't happen twice
+        }
+
+        // 2. LOCK THE IDENTITY: Prevent future manual renames
+        ship.renameLocked = true;
+
+        _addLog(LogEntry(
+          timestamp: DateTime.now(),
+          title: "ELITE TRANSFORMATION",
+          details: "${ship.nickname} has achieved Elite Status. Legacy Designation applied. "
+              "Attributes Gained: Corporate Prestige, Priority Docking, and Bleeding Edge Tech.",
+          isPositive: true,
+        ));
+      } else {
+        // Standard upgrade log for non-elite ships
+        _addLog(LogEntry(
+          timestamp: DateTime.now(),
+          title: "Upgrade Installed",
+          details: "${ship.nickname} systems have been enhanced.",
+        ));
+      }
     }
+
     ship.busyUntil = null;
     ship.currentTask = null;
   }
@@ -587,40 +611,45 @@ class GameState extends ChangeNotifier {
     if (shipIndex != -1) {
       final now = DateTime.now();
       final ship = fleet[shipIndex];
-      ship.missionStartTime = now;
-      ship.missionDistance = mission.distanceAU;
 
-      double factor = 2000.0; //2000 is just a ballpark guess at what I want, here
-      int speed = max(1, ship.speed);
-      double aiMult = max(0.5, 1.0 - (ship.aiLevel * 0.05));
-
-      double prestigeTimeMult = 1.0 - (serverFarmPrestige * 0.001);
-      prestigeTimeMult = prestigeTimeMult.clamp(0.25, 1.0);
-
-      int seconds = max(
-        30,
-        ((mission.distanceAU / speed) * factor * aiMult * prestigeTimeMult)
-            .clamp(30, 28800) //between 30 seconds and 8 hourrssssssss
-            .toInt(),
+      // 1. CALCULATE DURATION FIRST
+      // This replaces all your manual speed/aiMult/factor math
+      Duration missionDuration = GameFormulas.calculateMissionDuration(
+        distanceAU: mission.distanceAU,
+        speed: ship.speed,
+        ai: ship.aiLevel,
+        isBetaTiming: isBetaTiming,
+        isElite: ship.isMaxed,
+        shipClass: ship.shipClass,
       );
 
-      ship.missionEndTime = now.add(Duration(seconds: seconds));
+      // 2. SET TIMING DATA
+      ship.missionStartTime = now;
+      ship.missionEndTime = now.add(missionDuration);
+
+      // 3. STORE MISSION DATA (For Ops Screen Detail Sheet)
+      ship.currentMissionName = mission.title;
+      ship.pendingResourceType = mission.rewardResource;
       ship.pendingReward = mission.rewardSolars;
-      ship.pendingResource = mission.rewardResource;
       ship.pendingResourceAmount = mission.rewardResourceAmount;
 
+      // 4. MANAGE MISSION BOARD
       availableMissions.removeWhere((m) => m.id == mission.id);
 
+      // Replace basic missions so the board stays full
       if (mission.title.contains("Local Scrap Run")) {
         availableMissions.add(_missionService.getLocalScrapRun());
       } else if (mission.title.contains("Local Courier Run")) {
         availableMissions.add(_missionService.getLocalCourierRun());
       }
 
+      // 5. LOG THE LAUNCH
       _addLog(LogEntry(
         timestamp: now,
         title: "Mission Launched",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}. ETA: ${seconds}s",
+        // Using missionDuration.inSeconds ensures the log matches the actual timer
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}. ETA: ${missionDuration.inSeconds}s",
+        isPositive: true,
       ));
 
       _triggerUpdate();
@@ -629,12 +658,16 @@ class GameState extends ChangeNotifier {
 
   void _processMissionCompletion(Ship ship) {
     totalDeliveries++; // Increment for Category 4
-    int reward = ship.pendingReward;
-    int amount = ship.pendingResourceAmount;
-
-    double aiRewardMult = 1.0 + (ship.aiLevel * 0.05);
-    reward = (reward * aiRewardMult * 10).toInt();
-    amount = (amount * aiRewardMult * 10).toInt();
+    reward = GameFormulas.calculateSolarReward(
+      baseReward: ship.pendingReward,
+      aiLevel: ship.aiLevel,
+      isElite: ship.isMaxed,
+      shipClass: ship.shipClass,
+    );
+    amount = GameFormulas.calculateResourceReward(
+      baseAmount: ship.pendingResourceAmount,
+      aiLevel: ship.aiLevel,
+    );
 
     int resourceValue = 0;
     if (ship.pendingResource != null && amount > 0) {
@@ -692,6 +725,8 @@ class GameState extends ChangeNotifier {
 
     ship.pendingReward = 0; ship.pendingResource = null; ship.pendingResourceAmount = 0;
     ship.missionStartTime = null; ship.missionEndTime = null; ship.missionDistance = null;
+
+    _triggerUpdate();
   }
 
   int getResourcePrice(String resource) {
@@ -879,15 +914,12 @@ class GameState extends ChangeNotifier {
 
   int getRepairCost(Ship s) => ((1.0 - s.condition) * (getShipSaleValue(s) * 0.2) * repairCostMultiplier).toInt();
   int getShipSaleValue(Ship s) {
-    int basePrice = _getTemplatePrice(s.modelName);
-    double baseValue = basePrice * 0.7; // 70% Depreciation
-
-    // Add 50% of the total solar investment spent on upgrades
-    int upgradeInvestment = _calculateTotalUpgradeInvestment(s);
-    double totalAppraisal = baseValue + (upgradeInvestment * 0.5);
-
-    // Factor in the ship's current physical condition (0.0 to 1.0)
-    return (totalAppraisal * (0.5 + s.condition * 0.5)).toInt();
+    return GameFormulas.calculateShipValue(
+      basePrice: _getTemplatePrice(s.modelName),
+      upgradeInvestment: _calculateTotalUpgradeInvestment(s),
+      condition: s.condition,
+      isElite: s.isMaxed,
+    );
   }
 
   /// Calculates every solar spent on this ship's stats using the upgrade cost formula.
@@ -1032,6 +1064,7 @@ class GameState extends ChangeNotifier {
     if (solars >= actualCost && fleet.length < currentLimit) {
       solars -= actualCost;
       fleet.add(s);
+      _injectLocalMissionForClass(s.shipClass);
       _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "Fleet Expansion",
@@ -1045,10 +1078,50 @@ class GameState extends ChangeNotifier {
     return false;
   }
 
+  void _injectLocalMissionForClass(String shipClass) {
+    String targetTitle = "";
+    Mission? newMission;
+
+    switch (shipClass) {
+      case 'Mule':
+        targetTitle = "Local Scrap Run";
+        newMission = _missionService.getLocalScrapRun();
+        break;
+      case 'Sprinter':
+        targetTitle = "Local Courier Run";
+        newMission = _missionService.getLocalCourierRun();
+        break;
+      case 'Miner':
+        targetTitle = "Local Ore Run";
+        newMission = _missionService.getLocalOreRun();
+        break;
+      case 'Tanker':
+        targetTitle = "Local Gas Run";
+        newMission = _missionService.getLocalGasRun();
+        break;
+      case 'Harvester':
+        targetTitle = "Local Rift Run";
+        newMission = _missionService.getLocalRiftRun();
+        break;
+    }
+
+    // Only add if this specific local run isn't already available
+    if (newMission != null && !availableMissions.any((m) => m.title == targetTitle)) {
+      availableMissions.add(newMission);
+    }
+  }
+
   void renameShip(String id, String name) {
     final idx = fleet.indexWhere((s) => s.id == id);
     if (idx != -1 && name.isNotEmpty) {
       final s = fleet[idx];
+
+      // NEW: Block renaming if the ship has achieved Legacy Designation
+      if (s.renameLocked) {
+        debugPrint("COREY_LOG: Rename blocked. ${s.nickname} is a Legacy vessel.");
+        return;
+      }
+
       int cost = s.hasBeenRenamed ? 100 : 0;
       if (solars >= cost) {
         solars -= cost;
@@ -1080,13 +1153,31 @@ class GameState extends ChangeNotifier {
 
   void updateMissions(List<Mission> newMissions) {
     availableMissions = newMissions;
-    // Keep those locals pinned so there's always something to do
+
+    // 1. Mule/Sprinter defaults
     if (!availableMissions.any((m) => m.title.contains("Local Scrap Run"))) {
       availableMissions.add(_missionService.getLocalScrapRun());
     }
     if (!availableMissions.any((m) => m.title.contains("Local Courier Run"))) {
       availableMissions.add(_missionService.getLocalCourierRun());
     }
+
+    // 2. Specialized Class Safety (Corrected Method Names)
+    if (fleet.any((s) => s.shipClass == 'Miner') &&
+        !availableMissions.any((m) => m.requiredClass == 'Miner')) {
+      availableMissions.add(_missionService.getLocalMiningRun());
+    }
+
+    if (fleet.any((s) => s.shipClass == 'Tanker') &&
+        !availableMissions.any((m) => m.requiredClass == 'Tanker')) {
+      availableMissions.add(_missionService.getLocalGasRun());
+    }
+
+    if (fleet.any((s) => s.shipClass == 'Harvester') &&
+        !availableMissions.any((m) => m.requiredClass == 'Harvester')) {
+      availableMissions.add(_missionService.getLocalRiftRun());
+    }
+
     _triggerUpdate();
   }
 

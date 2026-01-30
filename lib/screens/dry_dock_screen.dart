@@ -17,7 +17,7 @@ class _DryDockScreenState extends State<DryDockScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
     final dryDockShips = state.fleet.where((s) => s.missionEndTime == null).toList();
-    
+
     // Sort by Value (Ascending: Cheap -> Expensive)
     dryDockShips.sort((a, b) => state.getShipSaleValue(a).compareTo(state.getShipSaleValue(b)));
 
@@ -39,7 +39,8 @@ class _DryDockScreenState extends State<DryDockScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Hangar Space: ${state.fleet.length} / ${state.maxFleetSize}", style: const TextStyle(color: Colors.grey)),
+              Text("Hangar Space: ${state.fleet.length} / ${state.maxFleetSize}",
+                  style: const TextStyle(color: Colors.grey)),
               ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -51,8 +52,7 @@ class _DryDockScreenState extends State<DryDockScreen> {
               ),
             ],
           ),
-          
-          // Fleet Summary Table
+
           if (state.fleet.isNotEmpty)
             Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
@@ -63,13 +63,13 @@ class _DryDockScreenState extends State<DryDockScreen> {
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: shipClasses.map((className) => 
-                  Column(
-                    children: [
-                      Text("${classCounts[className] ?? 0}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(className, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                    ],
-                  )
+                children: shipClasses.map((className) =>
+                    Column(
+                      children: [
+                        Text("${classCounts[className] ?? 0}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(className, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      ],
+                    )
                 ).toList(),
               ),
             ),
@@ -80,8 +80,8 @@ class _DryDockScreenState extends State<DryDockScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: state.solars >= totalRepairCost 
-                      ? () => state.repairAllShips() 
+                  onPressed: state.solars >= totalRepairCost
+                      ? () => state.repairAllShips()
                       : null,
                   icon: const Icon(Icons.build_circle, size: 18),
                   label: Text("REPAIR ALL FLEET (⁂$totalRepairCost)"),
@@ -94,24 +94,24 @@ class _DryDockScreenState extends State<DryDockScreen> {
             ),
 
           const SizedBox(height: 8),
-          
+
           Expanded(
             child: dryDockShips.isEmpty
                 ? Center(
-                    child: Text(
-                      state.fleet.isEmpty 
-                        ? "Dry Dock Empty. Buy your first ship!" 
-                        : "All ships are currently out on missions.",
-                      style: const TextStyle(fontSize: 16, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
+              child: Text(
+                state.fleet.isEmpty
+                    ? "Dry Dock Empty. Buy your first ship!"
+                    : "All ships are currently out on missions.",
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            )
                 : ListView.builder(
-                    itemCount: dryDockShips.length,
-                    itemBuilder: (context, index) {
-                      return ShipCard(ship: dryDockShips[index]);
-                    },
-                  ),
+              itemCount: dryDockShips.length,
+              itemBuilder: (context, index) {
+                return ShipCard(ship: dryDockShips[index]);
+              },
+            ),
           ),
         ],
       ),
@@ -128,17 +128,16 @@ class ShipCard extends StatelessWidget {
     final state = Provider.of<GameState>(context, listen: false);
     final bool isBusy = ship.busyUntil != null;
     final bool isFullyRepaired = ship.condition >= 1.0;
-    
-    final bool isFullyUpgraded = 
-        ship.speed >= ship.maxSpeed &&
-        ship.cargoCapacity >= ship.maxCargo &&
-        ship.fuelCapacity >= ship.maxFuel &&
-        ship.shieldLevel >= ship.maxShield &&
-        ship.aiLevel >= ship.maxAI;
+    final bool isElite = ship.isMaxed;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isElite
+            ? const BorderSide(color: Colors.cyanAccent, width: 1)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -154,12 +153,17 @@ class ShipCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text("${ship.isMaxed ? '[E] ' : ''}${ship.nickname}",
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            child: Text(
+                              "${isElite ? '💎 ' : ''}${ship.nickname}",
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: isElite ? Colors.cyanAccent : Colors.white,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (!isBusy)
+                          if (!isBusy && !ship.renameLocked)
                             IconButton(
                               icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
                               padding: EdgeInsets.zero,
@@ -168,7 +172,8 @@ class ShipCard extends StatelessWidget {
                             ),
                         ],
                       ),
-                      Text("${ship.modelName} (${ship.shipClass})", style: TextStyle(color: Colors.grey[400])),
+                      Text("${ship.modelName} (${ship.shipClass})",
+                          style: TextStyle(color: Colors.grey[400])),
                     ],
                   ),
                 ),
@@ -176,7 +181,7 @@ class ShipCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -187,7 +192,7 @@ class ShipCard extends StatelessWidget {
                 _StatIcon(icon: Icons.psychology, label: "AI", value: "${ship.aiLevel}"),
               ],
             ),
-            
+
             const SizedBox(height: 16),
             const Text("Condition", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
@@ -199,7 +204,7 @@ class ShipCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
             ),
 
-            if (isBusy) 
+            if (isBusy)
               _buildMaintenanceProgress(ship)
             else ...[
               const SizedBox(height: 16),
@@ -207,49 +212,49 @@ class ShipCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: isFullyUpgraded ? null : () {
+                      onPressed: isElite ? null : () {
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
                           builder: (context) => DryDockUpgradeScreen(ship: ship),
                         );
                       },
-                      icon: Icon(isFullyUpgraded ? Icons.check_circle : Icons.upgrade),
-                      label: Text(isFullyUpgraded ? "MAXED" : "UPGRADE"),
+                      icon: Icon(isElite ? Icons.verified : Icons.upgrade),
+                      label: Text(isElite ? "VANGUARD" : "UPGRADE"),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isFullyUpgraded ? Colors.grey[800] : Colors.indigo[900],
-                        foregroundColor: isFullyUpgraded ? Colors.grey[500] : Colors.white,
+                        backgroundColor: isElite ? Colors.cyan[900]!.withOpacity(0.3) : Colors.indigo[900],
+                        foregroundColor: isElite ? Colors.cyanAccent : Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        disabledBackgroundColor: Colors.grey[900],
-                        disabledForegroundColor: Colors.grey[600],
+                        disabledBackgroundColor: Colors.black26,
+                        disabledForegroundColor: Colors.cyanAccent.withOpacity(0.5),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: isFullyRepaired 
-                      ? ElevatedButton.icon(
-                          onPressed: () => _confirmSell(context, state, ship),
-                          icon: const Icon(Icons.sell, size: 16),
-                          label: Text("SELL (⁂${state.getShipSaleValue(ship)})"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red[900],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        )
-                      : ElevatedButton.icon(
-                          onPressed: (state.solars >= state.getRepairCost(ship)) 
-                              ? () => state.repairShip(ship.id) 
-                              : null,
-                          icon: const Icon(Icons.build, size: 16),
-                          label: Text("REPAIR (⁂${state.getRepairCost(ship)})"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueGrey[800],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
+                    child: isFullyRepaired
+                        ? ElevatedButton.icon(
+                      onPressed: () => _confirmSell(context, state, ship),
+                      icon: const Icon(Icons.sell, size: 16),
+                      label: Text("SELL (⁂${state.getShipSaleValue(ship)})"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[900],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    )
+                        : ElevatedButton.icon(
+                      onPressed: (state.solars >= state.getRepairCost(ship))
+                          ? () => state.repairShip(ship.id)
+                          : null,
+                      icon: const Icon(Icons.build, size: 16),
+                      label: Text("REPAIR (⁂${state.getRepairCost(ship)})"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey[800],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -265,7 +270,10 @@ class ShipCard extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Confirm Sale"),
-        content: Text("Are you sure you want to sell ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}? You will receive ⁂ ${state.getShipSaleValue(ship)}."),
+        content: Text(
+            "Are you sure you want to sell ${ship.isMaxed ? 'this Legacy Vessel' : ship.nickname}? "
+                "You will receive ⁂ ${state.getShipSaleValue(ship)}."
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
           TextButton(
@@ -298,8 +306,8 @@ class ShipCard extends StatelessWidget {
               maxLength: 20,
             ),
             const SizedBox(height: 8),
-            Text(cost == 0 ? "First rename is free." : "Registration fee: ⁂$cost Solars", 
-              style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(cost == 0 ? "First rename is free." : "Registration fee: ⁂$cost Solars",
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
           ],
         ),
         actions: [
@@ -351,8 +359,10 @@ class ShipCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("${ship.currentTask} Progress...", style: const TextStyle(fontSize: 10, color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
-                  Text(timeStr, style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.orangeAccent)),
+                  Text("${ship.currentTask} Progress...",
+                      style: const TextStyle(fontSize: 10, color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
+                  Text(timeStr,
+                      style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.orangeAccent)),
                 ],
               ),
               const SizedBox(height: 4),
