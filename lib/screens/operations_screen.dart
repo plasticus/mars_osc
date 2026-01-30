@@ -276,7 +276,7 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _EliteAttributeRow(title: "Corporate Prestige", value: "+${level * 3}% Solars", icon: Icons.payments_outlined),
+            _EliteAttributeRow(title: "Vanguard Honorarium", value: "+${level * 3}% Solars", icon: Icons.payments_outlined),
             _EliteAttributeRow(title: "Priority Docking", value: "-${level * 2}% Flight Time", icon: Icons.timer_outlined),
             _EliteAttributeRow(title: "Bleeding Edge Tech", value: "125% Value / 0% Depr.", icon: Icons.biotech_outlined),
             _EliteAttributeRow(title: "Legacy Designation", value: "Identity Registered", icon: Icons.app_registration),

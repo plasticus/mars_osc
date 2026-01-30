@@ -49,6 +49,15 @@ class LogEntry {
   }
 }
 
+void _applyHullWear(Ship ship) {
+  double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
+
+  wear = max(wear, (ship.missionDistance ?? 1.0) * 0.0005) * (0.8 + Random().nextDouble() * 0.4);
+
+  double oldC = ship.condition;
+  ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
+}
+
 class GameState extends ChangeNotifier {
   int solars = 50000;
   String companyName = "Establishing Link...";
@@ -591,8 +600,8 @@ class GameState extends ChangeNotifier {
         _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "ELITE TRANSFORMATION",
-          details: "${ship.nickname} has achieved Elite Status. Legacy Designation applied. "
-              "Attributes Gained: Corporate Prestige, Priority Docking, and Bleeding Edge Tech.",
+          details: "${ship.nickname} has achieved Elite Status. "
+              "Attributes Gained: Vanguard Honorarium, Priority Docking, Bleeding Edge Tech, and Legacy Designation",
           isPositive: true,
         ));
       } else {
@@ -660,76 +669,47 @@ class GameState extends ChangeNotifier {
   }
 
   void _processMissionCompletion(Ship ship) {
-    totalContracts++; // Increment for Category 4
-    int reward = GameFormulas.calculateSolarReward(
-      baseReward: ship.pendingReward,
+    totalContracts++;
+
+    // 1. Ask the Authority for the results
+    final results = GameFormulas.calculateFullMissionResults(
+      pendingReward: ship.pendingReward,
+      pendingResource: ship.pendingResource,
+      pendingResourceAmount: ship.pendingResourceAmount,
       aiLevel: ship.aiLevel,
       isElite: ship.isMaxed,
-      shipClass: ship.shipClass,
+      modelName: ship.modelName,
+      broadcastingPrestige: broadcastingArrayPrestige,
+      currentStorageUsed: (ore + gas + crystals),
+      maxStorage: maxStorage,
     );
 
-    int amount = GameFormulas.calculateResourceReward(
-      baseAmount: ship.pendingResourceAmount,
-      aiLevel: ship.aiLevel,
-    );
+    // 2. Apply the changes to the State
+    solars += results.totalSolars;
 
-    int resourceValue = 0;
-    if (ship.pendingResource != null && amount > 0) {
-      resourceValue = amount * getResourcePrice(ship.pendingResource!);
-    }
-    int totalMissionValue = reward + resourceValue;
-
-    int eliteBonus = ship.isMaxed ? (totalMissionValue * 0.05).toInt() : 0;
-
-    // Broadcasting Prestige Bonus: 0.1% per level of total mission value
-    int broadcastBonus = 0;
-    if (broadcastingArrayPrestige > 0) {
-      broadcastBonus = (totalMissionValue * (broadcastingArrayPrestige * 0.001)).round();
+    if (results.resourceAmount > 0) {
+      if (results.resourceType == 'Ore') ore += results.resourceAmount;
+      if (results.resourceType == 'Gas') gas += results.resourceAmount;
+      if (results.resourceType == 'Crystals') crystals += results.resourceAmount;
     }
 
-    solars += reward + eliteBonus + broadcastBonus;
+    // 3. Update the Log (All info comes from results)
+    String earnings = "⁂${results.baseReward}";
+    if (results.brandReachBonus > 0) earnings += " + ⁂${results.brandReachBonus} (Brand Reach)";
+    if (results.vanguardHonorarium > 0) earnings += " + ⁂${results.vanguardHonorarium} (Vanguard Honorarium)";
+    if (results.resourceAmount > 0) earnings += " + ${results.resourceAmount}m³ ${results.resourceType}";
+    if (results.overflowSolars > 0) earnings += "\n(⚠️ Storage Full: Sold overflow for ⁂${results.overflowSolars})";
 
-    String earnings = reward > 0 ? "⁂$reward" : "";
-    if (eliteBonus > 0) earnings += "${earnings.isEmpty ? "" : " + "}⁂$eliteBonus (Elite)";
-    if (broadcastBonus > 0) earnings += "${earnings.isEmpty ? "" : " + "}⁂$broadcastBonus (Brand Reach)";
-
-    if (ship.pendingResource != null && amount > 0) {
-      int space = maxStorage - (ore + gas + crystals);
-      int toStore = min(amount, max(0, space));
-      int overflow = amount - toStore;
-
-      if (toStore > 0) {
-        if (ship.pendingResource == 'Ore') ore += toStore;
-        if (ship.pendingResource == 'Gas') gas += toStore;
-        if (ship.pendingResource == 'Crystals') crystals += toStore;
-      }
-
-      String icon = ship.pendingResource == 'Ore' ? "🏔️" : (ship.pendingResource == 'Gas' ? "☁️" : "💎");
-      earnings += "${earnings.isEmpty ? "" : " + "}$toStore m³ $icon ${ship.pendingResource}";
-
-      if (overflow > 0) {
-        int val = (overflow * getResourcePrice(ship.pendingResource!) * 0.75).toInt();
-        solars += val;
-        earnings += "\n(⚠️ Storage Full: $overflow m³ sold rushed for ⁂$val)";
-      }
-    }
-
-    double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
-    wear = max(wear, (ship.missionDistance ?? 1.0) * 0.0005) * (0.8 + Random().nextDouble() * 0.4);
-
-    double oldC = ship.condition;
-    ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
-
+    // 4. Finalize Wear & Tear and Cleanup (Existing logic)
+    _applyHullWear(ship);
     _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Mission Return: ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
-      details: "Earnings: $earnings. Hull Wear: -${((oldC - ship.condition) * 100).toStringAsFixed(2)}%.",
+      details: "Earnings: $earnings.",
       isPositive: true,
     ));
 
-    ship.pendingReward = 0; ship.pendingResource = null; ship.pendingResourceAmount = 0;
-    ship.missionStartTime = null; ship.missionEndTime = null; ship.missionDistance = null;
-
+    ship.clearMissionData(); // Helpful to move cleanup to a helper in ship_model
     _triggerUpdate();
   }
 
@@ -902,8 +882,9 @@ class GameState extends ChangeNotifier {
     int cost = getUpgradeCost(s, cur);
     if (solars >= cost && cur < mx) {
       solars -= cost;
-      if (stat == 'speed') s.speed++;
-      else if (stat == 'cargo') s.cargoCapacity++;
+      if (stat == 'speed') {
+        s.speed++;
+      } else if (stat == 'cargo') s.cargoCapacity++;
       else if (stat == 'fuel') s.fuelCapacity++;
       else if (stat == 'shield') s.shieldLevel++;
       else if (stat == 'ai') s.aiLevel++;

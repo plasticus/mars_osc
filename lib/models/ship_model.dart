@@ -38,6 +38,17 @@ class Ship {
   bool isRepairing;
   bool hasBeenRenamed;
 
+  void clearMissionData() {
+    pendingReward = 0;
+    pendingResource = null;
+    pendingResourceAmount = 0;
+    missionStartTime = null;
+    missionEndTime = null;
+    missionDistance = null;
+    currentMissionName = null;
+    pendingResourceType = null;
+  }
+
   Ship({
     required this.id,
     required this.nickname,

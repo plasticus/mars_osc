@@ -96,15 +96,18 @@ class _UpgradeRow extends StatelessWidget {
             width: 100,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueGrey.withOpacity(0.15),
-                foregroundColor: Colors.blueGrey[200],
+                // Keep the background very subtle so it's not "too gray"
+                backgroundColor: Colors.blue.withOpacity(0.05),
+                // Make the solars and text blue
+                foregroundColor: Colors.blueAccent,
                 side: BorderSide(
-                  color: Colors.blueGrey.withOpacity(0.4),
-                  width: 1,
+                  // Use a matching blue border to define the button shape
+                  color: Colors.blueAccent.withOpacity(0.4),
+                  width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 padding: EdgeInsets.zero,
-                elevation: 0, 
+                elevation: 0,
               ),
               onPressed: (isMaxed || !canAfford) ? null : () {
                 bool becameElite = state.upgradeShipStat(ship.id, statKey);
@@ -115,7 +118,11 @@ class _UpgradeRow extends StatelessWidget {
               },
               child: Text(
                 isMaxed ? "MAX" : "⁂${cost.toString()}",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ),
@@ -143,7 +150,7 @@ class _UpgradeRow extends StatelessWidget {
             const SizedBox(height: 8),
           // Inside _showEliteTransformationDialog in dry_dock_upgrade_screen.dart
             _buildEliteFeature(Icons.timer, "Priority Docking", "Significantly faster mission turnaround."),
-            _buildEliteFeature(Icons.trending_up, "Corporate Prestige", "+5% ⁂ Solars on all contracts."),
+            _buildEliteFeature(Icons.trending_up, "Vanguard Honorarium", "+5% ⁂ Solars on all contracts."),
             _buildEliteFeature(Icons.analytics, "Bleeding Edge Tech", "Maximum appraisal value for corporate assets."),
             _buildEliteFeature(Icons.verified, "Legacy Designation", "Vessel identity locked into corporate history."), // The 4th Pillar
             const SizedBox(height: 16),
