@@ -20,12 +20,17 @@ class GameFormulas {
   static const double aiFuelEfficiency = 0.5;
 
   // --- ELITE & REWARD TUNING ---
-  static const double globalRewardMultiplier = 5.0; // Your new x5 balance
-  static const double solarBonusPerLevel = 0.03;   // 3% per Class Level
-  static const double dockingBonusPerLevel = 0.02; // 2% per Class Level
-  static const double eliteValueMultiplier = 1.25; // 25% value jump
+  static const double globalRewardMultiplier = 5.0;
+  static const double solarBonusPerLevel = 0.03;
+  static const double dockingBonusPerLevel = 0.02;
+  static const double eliteValueMultiplier = 1.25;
 
-  /// Helper to convert class strings to numeric levels for formulas
+  // --- OFFLINE AI TUNING ---
+  static const int offlineSaleIntervalMinutes = 1; // How often the AI checks the market
+  static const double offlineEfficiencyPenalty = 1.0; // 90% efficiency while app is closed
+  static const int maxOfflineMinutes = 1440; // Cap at 24 hours of passive income
+
+  /// Helper to convert class strings to numeric levels
   static int getShipClassLevel(String shipClass) {
     switch (shipClass) {
       case 'Mule': return 1;
@@ -44,14 +49,10 @@ class GameFormulas {
     required bool isElite,
     required String shipClass,
   }) {
-    // Start with global multiplier
     double total = baseReward * globalRewardMultiplier;
-
-    // Apply AI Bonus (5% per level)
     double aiBonus = 1.0 + (aiLevel * 0.05);
     total *= aiBonus;
 
-    // Apply CORPORATE PRESTIGE (Elite only)
     if (isElite) {
       int level = getShipClassLevel(shipClass);
       total *= (1.0 + (level * solarBonusPerLevel));
@@ -65,10 +66,8 @@ class GameFormulas {
     required int baseAmount,
     required int aiLevel,
   }) {
-    // Resources get x5 and AI bonus, but typically not the Elite Solar bonus
     double total = baseAmount * globalRewardMultiplier;
     double aiBonus = 1.0 + (aiLevel * 0.05);
-
     return (total * aiBonus).toInt();
   }
 
@@ -86,11 +85,9 @@ class GameFormulas {
     required bool isElite,
   }) {
     if (isElite) {
-      // Bleeding Edge: No depreciation + 25% bonus
       double totalInvestment = (basePrice + upgradeInvestment).toDouble();
       return (totalInvestment * eliteValueMultiplier * (0.5 + condition * 0.5)).toInt();
     } else {
-      // Standard: 30% depreciation on base and 50% on upgrades
       double standardBase = basePrice * 0.7;
       double standardUpgrades = upgradeInvestment * 0.5;
       return ((standardBase + standardUpgrades) * (0.5 + condition * 0.5)).toInt();
@@ -105,7 +102,125 @@ class GameFormulas {
     return "${prefixes[random.nextInt(15)]} ${nouns[random.nextInt(15)]}";
   }
 
-  // --- RANGE & DURATION (UNCHANGED BUT SYNCED) ---
+  /// 6. OFFLINE AI AUTHORITY: Simulates sales while app is closed
+  static Map<String, dynamic> calculateOfflineAutoSales({
+    required int minutesAway,
+    required int startOre,
+    required int startGas,
+    required int startCrystals,
+    required int tradeDepotLevel,
+    required int maxStorage,
+    required Map<String, int> marketPrices,
+  }) {
+    int currentOre = startOre;
+    int currentGas = startGas;
+    int currentCrystals = startCrystals;
+    int totalRevenue = 0;
+
+    int ticks = min(minutesAway, maxOfflineMinutes);
+    double multiplier = (1.0 + (tradeDepotLevel * 0.05)) * offlineEfficiencyPenalty;
+
+    for (int i = 0; i < ticks; i++) {
+      var result = _simulateBalancedQuotaTick(
+        ore: currentOre,
+        gas: currentGas,
+        crystals: currentCrystals,
+        maxStorage: maxStorage,
+        prices: marketPrices,
+        multiplier: multiplier,
+      );
+
+      currentOre -= result['soldOre']!;
+      currentGas -= result['soldGas']!;
+      currentCrystals -= result['soldCrystals']!;
+      totalRevenue += result['revenue']!;
+
+      if (currentOre <= 0 && currentGas <= 0 && currentCrystals <= 0) break;
+    }
+
+    return {
+      'newOre': currentOre,
+      'newGas': currentGas,
+      'newCrystals': currentCrystals,
+      'totalRevenue': totalRevenue,
+      'minutesProcessed': ticks,
+    };
+  }
+
+  /// 7. ONLINE AI AUTHORITY: Wrapper for the unified tick logic
+  static Map<String, int> calculateOnlineAutoSale({
+    required int ore,
+    required int gas,
+    required int crystals,
+    required int tradeDepotLevel,
+    required int maxStorage,
+    required Map<String, int> marketPrices,
+  }) {
+    double multiplier = 1.0 + (tradeDepotLevel * 0.05);
+    return _simulateBalancedQuotaTick(
+      ore: ore,
+      gas: gas,
+      crystals: crystals,
+      maxStorage: maxStorage,
+      prices: marketPrices,
+      multiplier: multiplier,
+    );
+  }
+
+  /// UNIFIED MATH CORE: The Balanced Quota Logic
+  static Map<String, int> _simulateBalancedQuotaTick({
+    required int ore,
+    required int gas,
+    required int crystals,
+    required int maxStorage,
+    required Map<String, int> prices,
+    required double multiplier,
+  }) {
+    Random rng = Random();
+    double quotaPercent = 0.08 + (rng.nextDouble() * 0.04);
+    int totalQuota = (maxStorage * quotaPercent).round();
+
+    int targetPerType = (totalQuota / 3).floor();
+
+    int sOre = min(ore, targetPerType);
+    int sGas = min(gas, targetPerType);
+    int sCrystals = min(crystals, targetPerType);
+
+    int remainingQuota = totalQuota - (sOre + sGas + sCrystals);
+
+    if (remainingQuota > 0) {
+      int extraOre = min(ore - sOre, remainingQuota);
+      sOre += extraOre;
+      remainingQuota -= extraOre;
+
+      if (remainingQuota > 0) {
+        int extraGas = min(gas - sGas, remainingQuota);
+        sGas += extraGas;
+        remainingQuota -= extraGas;
+      }
+
+      if (remainingQuota > 0) {
+        int extraCrystals = min(crystals - sCrystals, remainingQuota);
+        sCrystals += extraCrystals;
+        remainingQuota -= extraCrystals;
+      }
+    }
+
+    int rev = 0;
+    rev += (sOre * (prices['Ore'] ?? 10) * multiplier).toInt();
+    rev += (sGas * (prices['Gas'] ?? 25) * multiplier).toInt();
+    rev += (sCrystals * (prices['Crystals'] ?? 100) * multiplier).toInt();
+
+    return {
+      'soldOre': sOre,
+      'soldGas': sGas,
+      'soldCrystals': sCrystals,
+      'revenue': rev,
+    };
+  }
+
+
+  // --- RANGE & DURATION ---
 
   static double getEffectiveRange(int fuel, int ai) {
     ai = max(0, ai);
@@ -128,7 +243,7 @@ class GameFormulas {
     required int ai,
     required bool isBetaTiming,
     required bool isElite,
-    required String shipClass, // Changed to string for easier helper use
+    required String shipClass,
   }) {
     double d = distanceAU.clamp(minDistance, maxDistance);
     double effectiveSpeed = getEffectiveSpeed(speed, ai);
@@ -148,16 +263,13 @@ class GameFormulas {
     return Duration(seconds: finalSeconds.toInt());
   }
 
-  /// MissionOK = EffectiveRange >= RangeRequired
   static bool canRunMission(double distanceAU, int fuel, int ai) {
     return getEffectiveRange(fuel, ai) >= getRangeRequired(distanceAU);
   }
 
-  /// MaxDistanceAU = 0.5 + (EffectiveRange * 31.5 / 18)
   static double getMaxDistanceAU(int fuel, int ai) {
     double effectiveRange = getEffectiveRange(fuel, ai);
     double calculatedMax = minDistance + (effectiveRange * distanceSpan / rangeScale);
     return calculatedMax;
   }
-
 }

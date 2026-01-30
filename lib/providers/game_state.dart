@@ -201,6 +201,7 @@ class GameState extends ChangeNotifier {
     if (_currentUid == uid) return;
     _currentUid = uid;
 
+
     isLoading = true;
     initError = null;
     notifyListeners();
@@ -231,6 +232,15 @@ class GameState extends ChangeNotifier {
         tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
         broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
         serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
+        DateTime? lastSaved;
+        if (data['lastSaved'] != null) {
+          lastSaved = (data['lastSaved'] as Timestamp).toDate();
+        }
+
+        // Run catch-up logic right here for AI Auto-sales
+        if (lastSaved != null) {
+          _processOfflineSales(lastSaved);
+        }
 
         if (data['nextMissionRefresh'] != null) {
           nextMissionRefresh = DateTime.tryParse(data['nextMissionRefresh']);
@@ -340,6 +350,7 @@ class GameState extends ChangeNotifier {
       batch.set(userRef, {
         'companyName': companyName,
         'hasNamedCompany': hasNamedCompany,
+        'lastSaved': FieldValue.serverTimestamp(),
 
         'solars': solars,
         'ore': ore,
@@ -511,36 +522,44 @@ class GameState extends ChangeNotifier {
   }
 
   void _performAutoSell() {
-    Random rng = Random();
-    double percent = 0.05 + (rng.nextDouble() * 0.05);
+    // 1. Gather current market data
+    Map<String, int> prices = {
+      'Ore': getResourcePrice('Ore'),
+      'Gas': getResourcePrice('Gas'),
+      'Crystals': getResourcePrice('Crystals'),
+    };
 
-    int soldOre = (ore * percent).ceil();
-    int soldGas = (gas * percent).ceil();
-    int soldCrystals = (crystals * percent).ceil();
+    // 2. Call the new formula
+    final result = GameFormulas.calculateOnlineAutoSale(
+      ore: ore,
+      gas: gas,
+      crystals: crystals,
+      tradeDepotLevel: tradeDepotLevel,
+      maxStorage: maxStorage, // New parameter
+      marketPrices: prices,
+    );
 
-    if (soldOre == 0 && ore > 0) soldOre = 1;
-    if (soldGas == 0 && gas > 0) soldGas = 1;
-    if (soldCrystals == 0 && crystals > 0) soldCrystals = 1;
+    // 3. Apply the results
+    int sOre = result['soldOre']!;
+    int sGas = result['soldGas']!;
+    int sCrystals = result['soldCrystals']!;
+    int revenue = result['revenue']!;
 
-    double multiplier = 1.0 + (tradeDepotLevel * 0.05);
-
-    int revenue = 0;
-    revenue += (soldOre * getResourcePrice('Ore') * multiplier).toInt();
-    revenue += (soldGas * getResourcePrice('Gas') * multiplier).toInt();
-    revenue += (soldCrystals * getResourcePrice('Crystals') * multiplier).toInt();
-
-    ore -= soldOre;
-    gas -= soldGas;
-    crystals -= soldCrystals;
+    ore -= sOre;
+    gas -= sGas;
+    crystals -= sCrystals;
     solars += revenue;
 
-    _addLog(LogEntry(
-      timestamp: DateTime.now(),
-      title: "Auto-Sell AI",
-      details: "Sold goods for ⁂$revenue (${(multiplier*100).toInt()}% rate). Left: $ore 🏔️ | $gas ☁️ | $crystals 💎",
-      solarChange: revenue,
-      isPositive: true,
-    ));
+    // 4. Log with the new "Balanced AI" branding
+    if (revenue > 0) {
+      _addLog(LogEntry(
+        timestamp: DateTime.now(),
+        title: "AI Trade Depot",
+        details: "Quota met. Sold $sOre🏔️ $sGas☁️ $sCrystals💎 for ⁂$revenue.",
+        solarChange: revenue,
+        isPositive: true,
+      ));
+    }
   }
 
   void manualSellAll() {
@@ -1283,6 +1302,46 @@ class GameState extends ChangeNotifier {
       debugPrint("COREY_LOG: System Purged and Memory Wiped.");
     } catch (e) {
       debugPrint("COREY_LOG: Reset failed: $e");
+    }
+  }
+
+  void _processOfflineSales(DateTime lastSaved) {
+    final now = DateTime.now();
+    int minutesAway = now.difference(lastSaved).inMinutes;
+
+    if (minutesAway < 1) return; // Not gone long enough for a tick
+
+    // 1. Run the simulation through GameFormulas
+    final result = GameFormulas.calculateOfflineAutoSales(
+      minutesAway: minutesAway,
+      startOre: ore,
+      startGas: gas,
+      startCrystals: crystals,
+      tradeDepotLevel: tradeDepotLevel,
+      maxStorage: maxStorage,
+      marketPrices: {
+        'Ore': getResourcePrice('Ore'),
+        'Gas': getResourcePrice('Gas'),
+        'Crystals': getResourcePrice('Crystals'),
+      },
+    );
+
+    // 2. Extract and apply
+    ore = result['newOre'];
+    gas = result['newGas'];
+    crystals = result['newCrystals'];
+    int revenue = result['totalRevenue'];
+    int processed = result['minutesProcessed'];
+
+    if (revenue > 0) {
+      solars += revenue;
+      _addLog(LogEntry(
+        timestamp: now,
+        title: "Offline Trade Earnings",
+        details: "AI processed $processed minutes of sales while you were away. Revenue: ⁂$revenue.",
+        solarChange: revenue,
+        isPositive: true,
+      ));
     }
   }
 
