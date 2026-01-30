@@ -78,7 +78,7 @@ class GameState extends ChangeNotifier {
   int tradeDepotLevel = 1;
   int repairGantryLevel = 0;
   int broadcastingArrayLevel = 1;
-  int totalDeliveries = 0; // Tracks every contract ever finished
+  int totalContracts = 0; // Tracks every contract ever finished
 
   //Prestige
   int tradeDepotPrestige = 0;
@@ -232,6 +232,7 @@ class GameState extends ChangeNotifier {
         tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
         broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
         serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
+        totalContracts = data['totalContracts'] ?? 0;
         DateTime? lastSaved;
         if (data['lastSaved'] != null) {
           lastSaved = (data['lastSaved'] as Timestamp).toDate();
@@ -365,7 +366,7 @@ class GameState extends ChangeNotifier {
         'repairGantryLevel': repairGantryLevel,
         'broadcastingArrayLevel': broadcastingArrayLevel,
         //Leaderboard stuff
-        'totalDeliveries': totalDeliveries,
+        'totalContracts': totalContracts,
         'fleet': fleet.map((s) => s.toJson()).toList(),
         'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
         // Prestige levels
@@ -386,7 +387,7 @@ class GameState extends ChangeNotifier {
         'topShipNickname': topShip?.nickname ?? "N/A", // Category 3
         'topShipClass': topShip?.shipClass ?? "N/A",
         'topShipValue': topShipValue,
-        'totalDeliveries': totalDeliveries, // Category 4
+        'totalContracts': totalContracts, // Category 4
         'lastUpdate': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -513,53 +514,36 @@ class GameState extends ChangeNotifier {
 
   void _startMarketLoop() {
     _marketTimer?.cancel();
-    _marketTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    _marketTimer = Timer.periodic(const Duration(minutes: 15), (timer) {
       if (ore > 0 || gas > 0 || crystals > 0) {
         _performAutoSell();
-        _triggerUpdate();
       }
     });
   }
 
   void _performAutoSell() {
-    // 1. Gather current market data
-    Map<String, int> prices = {
+    // Use your actual price getter to fetch current market values
+    Map<String, int> currentPrices = {
       'Ore': getResourcePrice('Ore'),
       'Gas': getResourcePrice('Gas'),
       'Crystals': getResourcePrice('Crystals'),
     };
 
-    // 2. Call the new formula
     final result = GameFormulas.calculateOnlineAutoSale(
       ore: ore,
       gas: gas,
       crystals: crystals,
       tradeDepotLevel: tradeDepotLevel,
-      maxStorage: maxStorage, // New parameter
-      marketPrices: prices,
+      maxStorage: maxStorage,
+      marketPrices: currentPrices, // Pass the dynamic prices here
     );
 
-    // 3. Apply the results
-    int sOre = result['soldOre']!;
-    int sGas = result['soldGas']!;
-    int sCrystals = result['soldCrystals']!;
-    int revenue = result['revenue']!;
+    ore -= result['soldOre']!;
+    gas -= result['soldGas']!;
+    crystals -= result['soldCrystals']!;
+    solars += result['revenue']!;
 
-    ore -= sOre;
-    gas -= sGas;
-    crystals -= sCrystals;
-    solars += revenue;
-
-    // 4. Log with the new "Balanced AI" branding
-    if (revenue > 0) {
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "AI Trade Depot",
-        details: "Quota met. Sold $sOre🏔️ $sGas☁️ $sCrystals💎 for ⁂$revenue.",
-        solarChange: revenue,
-        isPositive: true,
-      ));
-    }
+    _triggerUpdate(); // Redraws UI and saves to Firestore
   }
 
   void manualSellAll() {
@@ -676,7 +660,7 @@ class GameState extends ChangeNotifier {
   }
 
   void _processMissionCompletion(Ship ship) {
-    totalDeliveries++; // Increment for Category 4
+    totalContracts++; // Increment for Category 4
     int reward = GameFormulas.calculateSolarReward(
       baseReward: ship.pendingReward,
       aiLevel: ship.aiLevel,

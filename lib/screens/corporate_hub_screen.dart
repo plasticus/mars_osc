@@ -174,7 +174,7 @@ class _LeaderboardViewState extends State<LeaderboardView> {
     'cashOnHand': 'Cash On Hand',
     'netWorth': 'Corporate Value',
     'topShipValue': 'Most Valuable Ship',
-    'totalDeliveries': 'Total Deliveries',
+    'totalContracts': 'Total Contracts',
   };
 
   @override
@@ -232,7 +232,7 @@ class _LeaderboardViewState extends State<LeaderboardView> {
   }
 
   String _getTrailingText(Map<String, dynamic> data) {
-    if (_activeCategory == 'totalDeliveries') return "${data['totalDeliveries'] ?? 0} runs";
+    if (_activeCategory == 'totalContracts') return "${data['totalContracts'] ?? 0} Contracts Completed";
     return "⁂ ${data[_activeCategory] ?? 0}";
   }
 }

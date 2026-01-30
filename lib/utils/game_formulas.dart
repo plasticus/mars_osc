@@ -26,7 +26,7 @@ class GameFormulas {
   static const double eliteValueMultiplier = 1.25;
 
   // --- OFFLINE AI TUNING ---
-  static const int offlineSaleIntervalMinutes = 1; // How often the AI checks the market
+  static const int offlineSaleIntervalMinutes = 15; // How often the AI checks the market
   static const double offlineEfficiencyPenalty = 1.0; // 90% efficiency while app is closed
   static const int maxOfflineMinutes = 1440; // Cap at 24 hours of passive income
 
@@ -117,7 +117,8 @@ class GameFormulas {
     int currentCrystals = startCrystals;
     int totalRevenue = 0;
 
-    int ticks = min(minutesAway, maxOfflineMinutes);
+    int totalMinutesProcessed = min(minutesAway, maxOfflineMinutes);
+    int ticks = (totalMinutesProcessed / offlineSaleIntervalMinutes).floor();
     double multiplier = (1.0 + (tradeDepotLevel * 0.05)) * offlineEfficiencyPenalty;
 
     for (int i = 0; i < ticks; i++) {
@@ -156,15 +157,50 @@ class GameFormulas {
     required int maxStorage,
     required Map<String, int> marketPrices,
   }) {
+    Random rng = Random();
+    // Target: 8-12% of MAX CAPACITY
+    double quotaPercent = 0.08 + (rng.nextDouble() * 0.04);
+    int totalQuota = (maxStorage * quotaPercent).round();
+
+    // Try to sell an equal amount of each
+    int targetPerType = (totalQuota / 3).floor();
+    int sOre = min(ore, targetPerType);
+    int sGas = min(gas, targetPerType);
+    int sCrystals = min(crystals, targetPerType);
+
+    int remainingQuota = totalQuota - (sOre + sGas + sCrystals);
+    if (remainingQuota > 0) {
+      // Try to dump the remaining work into Ore
+      int extraOre = min(ore - sOre, remainingQuota);
+      sOre += extraOre;
+      remainingQuota -= extraOre;
+
+      // If we still have quota (Ore is empty), try Gas
+      if (remainingQuota > 0) {
+        int extraGas = min(gas - sGas, remainingQuota);
+        sGas += extraGas;
+        remainingQuota -= extraGas;
+      }
+
+      // If we STILL have quota (Gas is empty), try Crystals
+      if (remainingQuota > 0) {
+        int extraCrystals = min(crystals - sCrystals, remainingQuota);
+        sCrystals += extraCrystals;
+        remainingQuota -= extraCrystals;
+      }
+    }
+
     double multiplier = 1.0 + (tradeDepotLevel * 0.05);
-    return _simulateBalancedQuotaTick(
-      ore: ore,
-      gas: gas,
-      crystals: crystals,
-      maxStorage: maxStorage,
-      prices: marketPrices,
-      multiplier: multiplier,
-    );
+    int revenue = ((sOre * (marketPrices['Ore'] ?? 10) +
+        sGas * (marketPrices['Gas'] ?? 25) +
+        sCrystals * (marketPrices['Crystals'] ?? 100)) * multiplier).toInt();
+
+    return {
+      'soldOre': sOre,
+      'soldGas': sGas,
+      'soldCrystals': sCrystals,
+      'revenue': revenue,
+    };
   }
 
   /// UNIFIED MATH CORE: The Balanced Quota Logic
@@ -218,6 +254,8 @@ class GameFormulas {
       'revenue': rev,
     };
   }
+
+
 
 
   // --- RANGE & DURATION ---
