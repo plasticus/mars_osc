@@ -224,29 +224,24 @@ class MissionService {
 
     switch (shipClass) {
       case 'Mule':
-        variance = 5 + (techLevel * 3);
+        variance = 5 + (techLevel * 2); // Max 5 + 10 = 15 (Safe under Titan's 18)
         break;
       case 'Sprinter':
-        variance = (1 + techLevel).clamp(1, 5);
+        variance = 1 + techLevel; // Max 1 + 5 = 6 (Matches Warp Shadow)
         break;
       case 'Tanker':
-        variance = 3 + techLevel;
+        variance = 3 + (techLevel * 3); // Max 1 + 15 = 16 (Safe under Infinite Reach's 20)
         break;
       case 'Miner':
         base = 2;
-        variance = 4 + (techLevel * 2);
+        variance = 2 + techLevel; // Max 2 + 5 = 7 (Safe under Core Driller's 12)
         break;
       case 'Harvester':
         base = 1;
-        variance = 3 + techLevel;
+        variance = 1 + techLevel; // Max 1 + 5 = 6 (Matches Singularity)
         break;
     }
-
     int result = base + _random.nextInt(variance);
-
-    // FINAL SAFETY CAP: Ensure Sprinters never exceed 6
-    if (shipClass == 'Sprinter') return result.clamp(1, 6);
-
     return min(20, result);
   }
 
