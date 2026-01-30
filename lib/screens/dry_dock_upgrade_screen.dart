@@ -95,18 +95,28 @@ class _UpgradeRow extends StatelessWidget {
           SizedBox(
             width: 100,
             child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueGrey.withOpacity(0.15),
+                foregroundColor: Colors.blueGrey[200],
+                side: BorderSide(
+                  color: Colors.blueGrey.withOpacity(0.4),
+                  width: 1,
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: EdgeInsets.zero,
+                elevation: 0, 
+              ),
               onPressed: (isMaxed || !canAfford) ? null : () {
-                // Capture the elite status result
                 bool becameElite = state.upgradeShipStat(ship.id, statKey);
-                // Close the current upgrade drawer
                 Navigator.pop(context);
-                // If the ship just hit Elite status, trigger the specialized dialog
                 if (becameElite) {
                   _showEliteTransformationDialog(context, ship);
                 }
               },
-              // Restored the missing button label
-              child: Text(isMaxed ? "MAX" : "⁂$cost", style: const TextStyle(fontSize: 12)),
+              child: Text(
+                isMaxed ? "MAX" : "⁂${cost.toString()}",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
             ),
           ),
         ],
