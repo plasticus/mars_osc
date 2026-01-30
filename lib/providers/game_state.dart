@@ -886,11 +886,11 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  void upgradeShipStat(String shipId, String stat) {
+  bool upgradeShipStat(String shipId, String stat) {
     final idx = fleet.indexWhere((s) => s.id == shipId);
-    if (idx == -1) return;
+    if (idx == -1) return false;
     final s = fleet[idx];
-    if (s.busyUntil != null || s.missionEndTime != null) return;
+    if (s.busyUntil != null || s.missionEndTime != null) return false;
 
     int cur = 0, mx = 0;
     if (stat == 'speed') { cur = s.speed; mx = s.maxSpeed; }
@@ -902,18 +902,31 @@ class GameState extends ChangeNotifier {
     int cost = getUpgradeCost(s, cur);
     if (solars >= cost && cur < mx) {
       solars -= cost;
-      if (stat == 'speed') {
-        s.speed++;
-      } else if (stat == 'cargo') s.cargoCapacity++;
+      if (stat == 'speed') s.speed++;
+      else if (stat == 'cargo') s.cargoCapacity++;
       else if (stat == 'fuel') s.fuelCapacity++;
       else if (stat == 'shield') s.shieldLevel++;
       else if (stat == 'ai') s.aiLevel++;
 
+      // Check if this was the final upgrade
+      bool becomingElite = s.isMaxed && !s.renameLocked;
+
+      if (becomingElite) {
+        // Apply the Legacy name immediately if needed
+        if (!s.hasBeenRenamed) {
+          s.nickname = GameFormulas.generateLegacyName();
+          s.hasBeenRenamed = true;
+        }
+        s.renameLocked = true; // Lock it in
+      }
+
       s.busyUntil = DateTime.now().add(getUpgradeDuration(s, cur));
       s.currentTask = 'Upgrading';
-      _addLog(LogEntry(timestamp: DateTime.now(), title: "Systems Upgrade", details: "${s.nickname} $stat enhanced. Cost: ⁂$cost.", solarChange: -cost, isPositive: false));
+
       _triggerUpdate();
+      return becomingElite; // Tell the UI to show the popup
     }
+    return false;
   }
 
   int getRepairCost(Ship s) => ((1.0 - s.condition) * (getShipSaleValue(s) * 0.2) * repairCostMultiplier).toInt();

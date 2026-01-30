@@ -10,7 +10,7 @@ class DryDockUpgradeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
@@ -31,7 +31,7 @@ class DryDockUpgradeScreen extends StatelessWidget {
           _UpgradeRow(label: "Fuel", current: ship.fuelCapacity, max: ship.maxFuel, statKey: 'fuel', ship: ship),
           _UpgradeRow(label: "Shields", current: ship.shieldLevel, max: ship.maxShield, statKey: 'shield', ship: ship),
           _UpgradeRow(label: "AI Core", current: ship.aiLevel, max: ship.maxAI, statKey: 'ai', ship: ship),
-          
+
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -96,14 +96,80 @@ class _UpgradeRow extends StatelessWidget {
             width: 100,
             child: ElevatedButton(
               onPressed: (isMaxed || !canAfford) ? null : () {
-                state.upgradeShipStat(ship.id, statKey);
+                // Capture the elite status result
+                bool becameElite = state.upgradeShipStat(ship.id, statKey);
+                // Close the current upgrade drawer
                 Navigator.pop(context);
+                // If the ship just hit Elite status, trigger the specialized dialog
+                if (becameElite) {
+                  _showEliteTransformationDialog(context, ship);
+                }
               },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                backgroundColor: Colors.blueGrey[800],
-              ),
+              // Restored the missing button label
               child: Text(isMaxed ? "MAX" : "⁂$cost", style: const TextStyle(fontSize: 12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEliteTransformationDialog(BuildContext context, Ship ship) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text("ELITE TRANSFORMATION",
+            style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("${ship.nickname} has achieved Elite Status.",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Divider(height: 32, color: Colors.white10),
+            const Text("Attributes Gained:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 8),
+            _buildEliteFeature(Icons.timer, "Priority Docking", "Significantly faster mission turnaround."),
+            _buildEliteFeature(Icons.trending_up, "Corporate Prestige", "+5% Solar rewards on all contracts."),
+            _buildEliteFeature(Icons.analytics, "Bleeding Edge Tech", "Maximum appraisal value for corporate assets."),
+            const SizedBox(height: 16),
+            // Flavor text only for vessels that received a Legacy Name from the crew
+            if (ship.renameLocked && ship.hasBeenRenamed) ...[
+              const Text("Notice:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const Text(
+                "Since no custom designation was assigned, the Captain has issued a Legacy Name to honor this vessel's service.",
+                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.white70),
+              ),
+            ]
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("ACKNOWLEDGED", style: TextStyle(color: Colors.orangeAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEliteFeature(IconData icon, String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.orangeAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(text: "$title: ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  TextSpan(text: desc, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                ],
+              ),
             ),
           ),
         ],
