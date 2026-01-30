@@ -217,6 +217,7 @@ class MissionService {
     return range[0] + _random.nextDouble() * (range[1] - range[0]);
   }
 
+  // Inside MissionService class in mission_service.dart
   int _generateCargoRequirement(String shipClass, int techLevel) {
     int base = 1;
     int variance = 1;
@@ -226,7 +227,7 @@ class MissionService {
         variance = 5 + (techLevel * 3);
         break;
       case 'Sprinter':
-        variance = 2 + techLevel;
+        variance = (1 + techLevel).clamp(1, 5);
         break;
       case 'Tanker':
         variance = 3 + techLevel;
@@ -240,7 +241,13 @@ class MissionService {
         variance = 3 + techLevel;
         break;
     }
-    return min(20, base + _random.nextInt(variance));
+
+    int result = base + _random.nextInt(variance);
+
+    // FINAL SAFETY CAP: Ensure Sprinters never exceed 6
+    if (shipClass == 'Sprinter') return result.clamp(1, 6);
+
+    return min(20, result);
   }
 
   // FIXED: Moved this method INSIDE the class

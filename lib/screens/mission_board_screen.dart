@@ -265,7 +265,9 @@ class MissionCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(24),
@@ -286,23 +288,33 @@ class MissionCard extends StatelessWidget {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       enabled: error == null && !isBusy,
-                      leading: Icon(Icons.rocket_launch, color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]),
+                      leading: Icon(
+                          Icons.rocket_launch,
+                          color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]
+                      ),
                       title: Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(error ?? (isBusy ? "System Busy" : "Flight Ready"),
-                              style: TextStyle(color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent, fontSize: 12)),
+                          Text(
+                            error ?? (isBusy ? "System Busy" : "Flight Ready"),
+                            style: TextStyle(
+                                color: error == null && !isBusy ? Colors.greenAccent : Colors.redAccent,
+                                fontSize: 12
+                            ),
+                          ),
                           if (error == null && !isBusy)
                             Builder(builder: (context) {
-                              // Transit and Reward Logic
-                              double factor = 2000.0;
-                              double aiMult = (1.0 - (ship.aiLevel * 0.05)).clamp(0.5, 1.0);
-                              double prestigeMult = (1.0 - (state.serverFarmPrestige * 0.001)).clamp(0.25, 1.0);
-                              int totalSeconds = ((mission.distanceAU / ship.speed) * factor * aiMult * prestigeMult).clamp(30, 28800).toInt();
-                              final duration = Duration(seconds: totalSeconds);
+                              // Use the central duration formula for accuracy
+                              final duration = GameFormulas.calculateMissionDuration(
+                                distanceAU: mission.distanceAU,
+                                speed: ship.speed,
+                                ai: ship.aiLevel,
+                                isBetaTiming: state.isBetaTiming,
+                                isElite: ship.isMaxed,
+                                shipClass: ship.shipClass,
+                              );
 
-                              double shipAiMult = 1.0 + (ship.aiLevel * 0.05);
                               int estimatedPayout = GameFormulas.calculateSolarReward(
                                 baseReward: mission.rewardSolars,
                                 aiLevel: ship.aiLevel,
@@ -313,8 +325,45 @@ class MissionCard extends StatelessWidget {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("Est. Transit: ${duration.inHours}h ${duration.inMinutes % 60}m", style: TextStyle(color: Colors.grey[400], fontSize: 11)),
-                                  Text("Est. Payout: ⁂$estimatedPayout", style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  Text(
+                                      "Est. Transit: ${duration.inHours}h ${duration.inMinutes % 60}m",
+                                      style: TextStyle(color: Colors.grey[400], fontSize: 11)
+                                  ),
+                                  Text(
+                                      "Est. Payout: ⁂$estimatedPayout",
+                                      style: const TextStyle(
+                                          color: Colors.orangeAccent,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold
+                                      )
+                                  ),
+                                  // Resource Return Logic
+                                  if (mission.rewardResource != null && mission.rewardResourceAmount > 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2.0),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            mission.rewardResource == 'Ore' ? Icons.landscape :
+                                            (mission.rewardResource == 'Gas' ? Icons.cloud : Icons.diamond),
+                                            size: 10,
+                                            color: Colors.cyanAccent,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            "Est. Return: ${GameFormulas.calculateResourceReward(
+                                              baseAmount: mission.rewardResourceAmount,
+                                              aiLevel: ship.aiLevel,
+                                            )} m³ ${mission.rewardResource}",
+                                            style: const TextStyle(
+                                                color: Colors.cyanAccent,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                 ],
                               );
                             }),
@@ -326,7 +375,10 @@ class MissionCard extends StatelessWidget {
                           state.startMission(ship.id, mission);
                           Navigator.of(context).pop();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("${ship.nickname} deployed!"), backgroundColor: Colors.deepOrange[900]),
+                            SnackBar(
+                                content: Text("${ship.nickname} deployed!"),
+                                backgroundColor: Colors.deepOrange[900]
+                            ),
                           );
                         },
                         child: const Text("LAUNCH"),

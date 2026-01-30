@@ -358,9 +358,6 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.monetization_on, size: 14, color: Colors.amber),
-                      const SizedBox(width: 4),
-                      // Using GameFormulas to show the actual expected reward
                       Text(
                           "⁂ ${GameFormulas.calculateSolarReward(
                               baseReward: ship.pendingReward,
@@ -368,7 +365,7 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
                               isElite: ship.isMaxed,
                               shipClass: ship.shipClass
                           )}",
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.greenAccent)
                       ),
                       const SizedBox(width: 16),
                       const Icon(Icons.inventory, size: 14, color: Colors.cyanAccent),
