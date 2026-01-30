@@ -58,7 +58,7 @@ class _DryDockScreenState extends State<DryDockScreen> {
               margin: const EdgeInsets.symmetric(vertical: 8),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -222,11 +222,11 @@ class ShipCard extends StatelessWidget {
                       icon: Icon(isElite ? Icons.verified : Icons.upgrade),
                       label: Text(isElite ? "VANGUARD" : "UPGRADE"),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isElite ? Colors.cyan[900]!.withOpacity(0.3) : Colors.indigo[900],
+                        backgroundColor: isElite ? Colors.cyan[900]!.withValues(alpha: 0.3) : Colors.indigo[900],
                         foregroundColor: isElite ? Colors.cyanAccent : Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         disabledBackgroundColor: Colors.black26,
-                        disabledForegroundColor: Colors.cyanAccent.withOpacity(0.5),
+                        disabledForegroundColor: Colors.cyanAccent.withValues(alpha: 0.5),
                       ),
                     ),
                   ),

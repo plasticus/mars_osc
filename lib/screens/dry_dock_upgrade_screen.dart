@@ -97,12 +97,12 @@ class _UpgradeRow extends StatelessWidget {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 // Keep the background very subtle so it's not "too gray"
-                backgroundColor: Colors.blue.withOpacity(0.05),
+                backgroundColor: Colors.blue.withValues(alpha: 0.05),
                 // Make the solars and text blue
                 foregroundColor: Colors.blueAccent,
                 side: BorderSide(
                   // Use a matching blue border to define the button shape
-                  color: Colors.blueAccent.withOpacity(0.4),
+                  color: Colors.blueAccent.withValues(alpha: 0.4),
                   width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

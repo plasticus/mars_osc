@@ -51,10 +51,7 @@ class LogEntry {
 
 void _applyHullWear(Ship ship) {
   double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
-
   wear = max(wear, (ship.missionDistance ?? 1.0) * 0.0005) * (0.8 + Random().nextDouble() * 0.4);
-
-  double oldC = ship.condition;
   ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
 }
 
@@ -104,8 +101,6 @@ class GameState extends ChangeNotifier {
   Timer? _gameTimer;
   Timer? _marketTimer;
   bool _isInitialized = false;
-
-  static const double _timeScalingFactor = 0.54;
   bool isBetaTiming = true;
 
   DateTime? nextMissionRefresh; // New field for timer
@@ -589,7 +584,6 @@ class GameState extends ChangeNotifier {
       if (ship.isMaxed) {
         // 1. LEGACY DESIGNATION: Rename if it still has a default name
         if (!ship.hasBeenRenamed) {
-          String oldName = ship.nickname;
           ship.nickname = GameFormulas.generateLegacyName();
           ship.hasBeenRenamed = true; // Mark as renamed so it doesn't happen twice
         }

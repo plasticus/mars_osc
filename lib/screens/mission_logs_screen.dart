@@ -81,7 +81,7 @@ class MissionLogsScreen extends StatelessWidget {
         child: Opacity(
           opacity: 0.8, // CRANKED UP: Change 0.15 to 0.8 for testing
           child: Container(
-            color: Colors.red.withOpacity(0.2), // ADDED: Slight red box for visibility
+            color: Colors.red.withValues(alpha: 0.2), // ADDED: Slight red box for visibility
             child: TextButton(
               onPressed: () => _showResetDialog(context, state),
               child: const Text(

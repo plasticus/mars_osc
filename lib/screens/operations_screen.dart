@@ -261,8 +261,9 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
     super.dispose();
   }
 
-  void _showEliteInfo(BuildContext context, String shipClass) {
-    final int level = GameFormulas.getShipClassLevel(shipClass);
+  void _showEliteInfo(BuildContext context, String shipClass, String modelName) {
+    // We call the Authority to get the actual Tier (1-5) for this specific model
+    final int tier = GameFormulas.getShipTier(modelName);
 
     showDialog(
       context: context,
@@ -276,8 +277,16 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _EliteAttributeRow(title: "Vanguard Honorarium", value: "+${level * 3}% Solars", icon: Icons.payments_outlined),
-            _EliteAttributeRow(title: "Priority Docking", value: "-${level * 2}% Flight Time", icon: Icons.timer_outlined),
+            _EliteAttributeRow(
+                title: "Vanguard Honorarium",
+                value: "+${tier * 3}% Solars on Total Value",
+                icon: Icons.payments_outlined
+            ),
+            _EliteAttributeRow(
+                title: "Priority Docking",
+                value: "-${tier * 2}% Flight Time",
+                icon: Icons.timer_outlined
+            ),
             _EliteAttributeRow(title: "Bleeding Edge Tech", value: "125% Value / 0% Depr.", icon: Icons.biotech_outlined),
             _EliteAttributeRow(title: "Legacy Designation", value: "Identity Registered", icon: Icons.app_registration),
           ],
@@ -328,7 +337,7 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
               if (ship.isMaxed)
                 IconButton(
                   icon: const Icon(Icons.info_outline, size: 24, color: Colors.cyanAccent),
-                  onPressed: () => _showEliteInfo(context, ship.shipClass),
+                  onPressed: () => _showEliteInfo(context, ship.shipClass, ship.modelName),
                 )
               else
                 IconButton(
@@ -347,9 +356,9 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.purpleAccent.withOpacity(0.05),
+                color: Colors.purpleAccent.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.purpleAccent.withOpacity(0.2)),
+                border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,7 +372,8 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
                               baseReward: ship.pendingReward,
                               aiLevel: ship.aiLevel,
                               isElite: ship.isMaxed,
-                              shipClass: ship.shipClass
+                              modelName: ship.modelName, // Added this
+                              broadcastingPrestige: state.broadcastingArrayPrestige // Added this
                           )}",
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.greenAccent)
                       ),

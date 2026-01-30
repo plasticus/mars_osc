@@ -205,14 +205,14 @@ class MissionCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: isDoable ? BorderSide.none : BorderSide(color: Colors.grey.withOpacity(0.2)),
+        side: isDoable ? BorderSide.none : BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
       ),
       color: isDoable ? null : Colors.black12,
       child: ExpansionTile(
         iconColor: mainColor,
         collapsedIconColor: mainColor,
         leading: CircleAvatar(
-          backgroundColor: mainColor.withOpacity(0.1),
+          backgroundColor: mainColor.withValues(alpha: 0.1),
           child: Icon(Icons.assignment_outlined, color: mainColor, size: 20),
         ),
         title: Text(mission.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
@@ -417,9 +417,9 @@ class _RequirementChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: failed ? Border.all(color: Colors.deepOrange.withOpacity(0.3)) : null,
+        border: failed ? Border.all(color: Colors.deepOrange.withValues(alpha: 0.3)) : null,
       ),
       child: Row(
         children: [
