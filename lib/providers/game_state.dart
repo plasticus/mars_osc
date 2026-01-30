@@ -658,13 +658,14 @@ class GameState extends ChangeNotifier {
 
   void _processMissionCompletion(Ship ship) {
     totalDeliveries++; // Increment for Category 4
-    reward = GameFormulas.calculateSolarReward(
+    int reward = GameFormulas.calculateSolarReward(
       baseReward: ship.pendingReward,
       aiLevel: ship.aiLevel,
       isElite: ship.isMaxed,
       shipClass: ship.shipClass,
     );
-    amount = GameFormulas.calculateResourceReward(
+
+    int amount = GameFormulas.calculateResourceReward(
       baseAmount: ship.pendingResourceAmount,
       aiLevel: ship.aiLevel,
     );
@@ -1093,7 +1094,7 @@ class GameState extends ChangeNotifier {
         break;
       case 'Miner':
         targetTitle = "Local Ore Run";
-        newMission = _missionService.getLocalOreRun();
+        newMission = _missionService.getLocalMiningRun();
         break;
       case 'Tanker':
         targetTitle = "Local Gas Run";
