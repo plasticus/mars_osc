@@ -131,9 +131,11 @@ class _UpgradeRow extends StatelessWidget {
             const Divider(height: 32, color: Colors.white10),
             const Text("Attributes Gained:", style: TextStyle(color: Colors.grey, fontSize: 12)),
             const SizedBox(height: 8),
+          // Inside _showEliteTransformationDialog in dry_dock_upgrade_screen.dart
             _buildEliteFeature(Icons.timer, "Priority Docking", "Significantly faster mission turnaround."),
-            _buildEliteFeature(Icons.trending_up, "Corporate Prestige", "+5% Solar rewards on all contracts."),
+            _buildEliteFeature(Icons.trending_up, "Corporate Prestige", "+5% ⁂ Solars on all contracts."),
             _buildEliteFeature(Icons.analytics, "Bleeding Edge Tech", "Maximum appraisal value for corporate assets."),
+            _buildEliteFeature(Icons.verified, "Legacy Designation", "Vessel identity locked into corporate history."), // The 4th Pillar
             const SizedBox(height: 16),
             // Flavor text only for vessels that received a Legacy Name from the crew
             if (ship.renameLocked && ship.hasBeenRenamed) ...[

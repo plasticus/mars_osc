@@ -96,8 +96,21 @@ class GameFormulas {
 
   /// 5. LEGACY DESIGNATION: Name Generator
   static String generateLegacyName() {
-    final prefixes = ["Vanguard", "Zenith", "Obsidian", "Sovereign", "Stellar", "Infinite", "Absolute", "Eternal", "Apex", "Hallowed", "Celestial", "Omega", "Relic", "Titan", "Prime"];
-    final nouns = ["Apex", "Chassis", "Frame", "Core", "Prime", "Hull", "Vessel", "Keel", "Engine", "Node", "Entity", "Origin", "Vector", "Pillar", "Sovereign"];
+    final prefixes = [
+      "Vanguard", "Zenith", "Obsidian", "Sovereign", "Stellar",
+      "Infinite", "Absolute", "Eternal", "Apex", "Hallowed",
+      "Celestial", "Omega", "Relic", "Titan", "Prime",
+      "Astral", "Ghost", "Iron", "Mythic", "Nova",
+      "Oracle", "Phantom", "Solar", "Void", "Warp"
+    ];
+
+    final nouns = [
+      "Monolith", "Sentinel", "Harbinger", "Paragon", "Conduit",
+      "Aegis", "Catalyst", "Emissary", "Bastion", "Cipher",
+      "Entity", "Origin", "Vector", "Pillar", "Sovereign",
+      "Archon", "Colossus", "Dreadnought", "Icon", "Legion",
+      "Nexus", "Oblivion", "Paladin", "Specter", "Titan"
+    ];
     final random = Random();
     return "${prefixes[random.nextInt(15)]} ${nouns[random.nextInt(15)]}";
   }
