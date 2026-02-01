@@ -35,7 +35,7 @@ class TradeDepotScreen extends StatelessWidget {
             ),
             _ResourceCard(
               name: "Crystals", 
-              icon: Icons.diamond, 
+              icon: Icons.shield_moon, 
               color: Colors.purpleAccent, 
               amount: state.crystals, 
               price: state.getResourcePrice("Crystals"),

@@ -220,7 +220,7 @@ class ShipCard extends StatelessWidget {
                         );
                       },
                       icon: Icon(isElite ? Icons.verified : Icons.upgrade),
-                      label: Text(isElite ? "VANGUARD" : "UPGRADE"),
+                      label: Text(isElite ? "ELITE" : "UPGRADE"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isElite ? Colors.cyan[900]!.withValues(alpha: 0.3) : Colors.indigo[900],
                         foregroundColor: isElite ? Colors.cyanAccent : Colors.white,
@@ -398,3 +398,4 @@ class _StatIcon extends StatelessWidget {
     );
   }
 }
+

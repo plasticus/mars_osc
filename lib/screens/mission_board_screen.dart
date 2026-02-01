@@ -292,7 +292,15 @@ class MissionCard extends StatelessWidget {
                           Icons.rocket_launch,
                           color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]
                       ),
-                      title: Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Row(
+                          children: [
+                            if (ship.isMaxed) ...[
+                              const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 16),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -345,7 +353,7 @@ class MissionCard extends StatelessWidget {
                                         children: [
                                           Icon(
                                             mission.rewardResource == 'Ore' ? Icons.landscape :
-                                            (mission.rewardResource == 'Gas' ? Icons.cloud : Icons.diamond),
+                                            (mission.rewardResource == 'Gas' ? Icons.cloud : Icons.shield_moon),
                                             size: 10,
                                             color: Colors.cyanAccent,
                                           ),

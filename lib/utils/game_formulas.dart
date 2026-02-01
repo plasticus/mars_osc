@@ -30,10 +30,10 @@ class GameFormulas {
   static const double rangeScale = 18.0;
   static const double distanceSpan = 31.5;
 
-  static const double liveBaseSeconds = 36000.0;
-  static const double liveMinSeconds = 600.0;
-  static const double liveMaxSeconds = 36000.0;
-  static const double distExponent = 0.5;
+  static const double liveMinSeconds = 30.0;    // Absolute floor for any mission
+  static const double liveMaxSeconds = 18000.0; // 5 hours (60s * 60m * 5h)
+  static const double liveBaseSeconds = 18000.0; // The 5-hour anchor at max distance
+  static const double distExponent = 1.0;       // 1.0 = Linear scaling (easier to balance)
   static const double anchorSpeed = 2.0;
 
   static const double betaScale = 0.015;
@@ -207,12 +207,33 @@ class GameFormulas {
     }
   }
 
-  static String generateLegacyName() {
-    final prefixes = ["Vanguard", "Zenith", "Obsidian", "Sovereign", "Stellar", "Infinite", "Absolute", "Eternal", "Apex", "Hallowed"];
-    final nouns = ["Monolith", "Sentinel", "Harbinger", "Paragon", "Conduit", "Aegis", "Catalyst", "Emissary", "Bastion", "Cipher"];
-    final random = Random();
-    return "${prefixes[random.nextInt(prefixes.length)]} ${nouns[random.nextInt(nouns.length)]}";
-  }
+static String generateLegacyName() {
+  final prefixes = [
+    "Vanguard", "Zenith", "Obsidian", "Sovereign", "Stellar",
+    "Infinite", "Absolute", "Eternal", "Apex", "Hallowed",
+    "Crimson", "Ashen", "Ironclad", "Arcane", "Glacial",
+    "Phantom", "Radiant", "Tenebrous", "Umbral", "Golden",
+    "Fathomless", "Indomitable", "Veiled", "Eldritch", "Sundered",
+    "Celestial", "Wrathful", "Onyx", "Primordial", "Spectral", "Maximum",
+    "Winged", "Space", "Black", "Porcine", "Ebony", "Silver", "Green",
+    "Purple", "Blue", "Steel", "Silent", "Violent", "Blonde", "The Last",
+    "The First"
+  ];
+
+  final nouns = [
+    "Monolith", "Sentinel", "Harbinger", "Paragon", "Conduit",
+    "Aegis", "Catalyst", "Emissary", "Bastion", "Cipher",
+    "Colossus", "Warlock", "Titan", "Specter", "Goliath",
+    "Arbiter", "Veil", "Relic", "Throne", "Oracle",
+    "Archon", "Phantom", "Revenant", "Obelisk", "Warden",
+    "Leviathan", "Dreadnought", "Seraph", "Enigma",
+    "Ghost", "Giant", "Lion", "Whale", "Abyss", "Abomination",
+    "Lance", "Spud", "Eden"
+  ];
+
+  final random = Random();
+  return "${prefixes[random.nextInt(prefixes.length)]} ${nouns[random.nextInt(nouns.length)]}";
+}
 
   // --- TRADING & AI SALES ---
 
@@ -289,7 +310,7 @@ class GameFormulas {
     required double multiplier,
   }) {
     Random rng = Random();
-    double quotaPercent = 0.08 + (rng.nextDouble() * 0.04);
+    double quotaPercent = 0.006 + (rng.nextDouble() * 0.004);
     int totalQuota = (maxStorage * quotaPercent).round();
 
     int targetPerType = (totalQuota / 3).floor();
@@ -328,7 +349,6 @@ class GameFormulas {
   }
 
   // --- RANGE & DURATION ---
-
   static double getEffectiveRange(int fuel, int ai) => fuel + (aiFuelEfficiency * ai);
 
   static int getRangeRequired(double distanceAU) {
@@ -338,28 +358,38 @@ class GameFormulas {
 
   static double getEffectiveSpeed(int speed, int ai) => max(0.5, speed + (aiSpeedEfficiency * ai));
 
-  static Duration calculateMissionDuration({
-    required double distanceAU,
-    required int speed,
-    required int ai,
-    required bool isBetaTiming,
-    required bool isElite,
-    required String shipClass,
-  }) {
-    double d = distanceAU.clamp(minDistance, maxDistance);
-    double effectiveSpeed = getEffectiveSpeed(speed, ai);
-    double baseSecondsLive = liveBaseSeconds * pow(d / maxDistance, distExponent) * (anchorSpeed / effectiveSpeed);
+    static Duration calculateMissionDuration({
+      required double distanceAU,
+      required int speed,
+      required int ai,
+      required bool isElite,
+      required String shipClass,
+      bool isBetaTiming = false, // We can keep the param to avoid breaking signatures, but ignore it
+    }) {
+      // 1. Clamp distance to your game's range (0.5 to 32.0 AU)
+      double d = distanceAU.clamp(minDistance, maxDistance);
 
-    double finalSeconds = isBetaTiming
-        ? (baseSecondsLive * betaScale).clamp(betaMinSeconds, betaMaxSeconds)
-        : baseSecondsLive.clamp(liveMinSeconds, liveMaxSeconds);
+      // 2. Calculate speed impact
+      double effectiveSpeed = getEffectiveSpeed(speed, ai);
+      double speedFactor = anchorSpeed / effectiveSpeed;
 
-    if (isElite) {
-      finalSeconds *= getPriorityDockingMultiplier(getShipTier(shipClass), isElite);
+      // 3. Calculate time based on distance (Linear: d / max)
+      // At 32 AU, this is 1.0 * liveBaseSeconds. At 16 AU, it is 0.5 * liveBaseSeconds.
+      double travelSeconds = (d / maxDistance) * liveBaseSeconds * speedFactor;
+
+      // 4. Apply Elite priority docking (1.0 for normal, ~0.5-0.9 for Elite)
+      if (isElite) {
+        travelSeconds *= getPriorityDockingMultiplier(getShipTier(shipClass), isElite);
+      }
+
+      // 5. Hard clamp to your 30s - 5h window
+      int finalSeconds = travelSeconds.toInt().clamp(
+        liveMinSeconds.toInt(),
+        liveMaxSeconds.toInt()
+      );
+
+      return Duration(seconds: finalSeconds);
     }
-
-    return Duration(seconds: finalSeconds.toInt());
-  }
 
   static double getMaxDistanceAU(int fuel, int ai) {
     double effectiveRange = getEffectiveRange(fuel, ai);

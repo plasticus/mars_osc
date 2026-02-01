@@ -201,87 +201,83 @@ class GameState extends ChangeNotifier {
   // --- AUTHENTICATION & CLOUD SESSION ---
 
   Future<void> initializeUserSession(String uid) async {
-    // 1. CLAIM THE SESSION IMMEDIATELY (Stops the loop)
-    if (_currentUid == uid) return;
-    _currentUid = uid;
+      if (_currentUid == uid) return;
+      _currentUid = uid;
 
-
-    isLoading = true;
-    initError = null;
-    notifyListeners();
-
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get()
-          .timeout(const Duration(seconds: 10));
-
-      if (userDoc.exists) {
-        final data = userDoc.data()!;
-
-        // LOAD DATA FIRST
-        companyName = data['companyName'] ?? "Searching Registry...";
-        hasNamedCompany = data['hasNamedCompany'] ?? false;
-        solars = data['solars'] ?? 50000;
-        ore = data['ore'] ?? 0;
-        gas = data['gas'] ?? 0;
-        crystals = data['crystals'] ?? 0;
-        hangarLevel = data['hangarLevel'] ?? 1;
-        relayLevel = data['relayLevel'] ?? 1;
-        serverFarmLevel = data['serverFarmLevel'] ?? 0;
-        tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
-        repairGantryLevel = data['repairGantryLevel'] ?? 0;
-        broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
-        tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
-        broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
-        serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
-        totalContracts = data['totalContracts'] ?? 0;
-        DateTime? lastSaved;
-        if (data['lastSaved'] != null) {
-          lastSaved = (data['lastSaved'] as Timestamp).toDate();
-        }
-
-        // Run catch-up logic right here for AI Auto-sales
-        if (lastSaved != null) {
-          _processOfflineSales(lastSaved);
-        }
-
-        if (data['nextMissionRefresh'] != null) {
-          nextMissionRefresh = DateTime.tryParse(data['nextMissionRefresh']);
-        }
-
-        if (data['fleet'] != null) {
-          final List<dynamic> decodedFleet = data['fleet'];
-          fleet = decodedFleet.map((item) => Ship.fromJson(item)).toList();
-        }
-
-        if (data['missionLogs'] != null) {
-          final List<dynamic> decodedLogs = data['missionLogs'];
-          missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
-        }
-
-        // 2. RUN ENSURE AFTER DATA IS LOADED
-        await _ensureUserDefaults(uid);
-        isNewUser = false;
-      } else {
-        isNewUser = true;
-        companyName = _generateRandomCompanyName();
-      }
-
-      _isInitialized = true;
-
-    } on TimeoutException {
-      initError = "ERR_TIMEOUT: No response from Mars Relay.";
-      _currentUid = null; // Reset so they can try again
-    } catch (e) {
-      initError = "ERR_INITIALIZATION: ${e.toString()}";
-      _currentUid = null; // Reset so they can try again
-    } finally {
-      isLoading = false;
+      isLoading = true;
+      initError = null;
       notifyListeners();
+
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get()
+            .timeout(const Duration(seconds: 10));
+
+        if (userDoc.exists) {
+          final data = userDoc.data()!;
+
+          companyName = data['companyName'] ?? "Searching Registry...";
+          hasNamedCompany = data['hasNamedCompany'] ?? false;
+          solars = data['solars'] ?? 50000;
+          ore = data['ore'] ?? 0;
+          gas = data['gas'] ?? 0;
+          crystals = data['crystals'] ?? 0;
+          hangarLevel = data['hangarLevel'] ?? 1;
+          relayLevel = data['relayLevel'] ?? 1;
+          serverFarmLevel = data['serverFarmLevel'] ?? 0;
+          tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
+          repairGantryLevel = data['repairGantryLevel'] ?? 0;
+          broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
+          tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
+          broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
+          serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
+          totalContracts = data['totalContracts'] ?? 0;
+
+          DateTime? lastSaved;
+          if (data['lastSaved'] != null) {
+            lastSaved = (data['lastSaved'] as Timestamp).toDate();
+          }
+
+          if (data['nextMissionRefresh'] != null) {
+            nextMissionRefresh = DateTime.tryParse(data['nextMissionRefresh']);
+          }
+
+          if (data['fleet'] != null) {
+            final List<dynamic> decodedFleet = data['fleet'];
+            fleet = decodedFleet.map((item) => Ship.fromJson(item)).toList();
+          }
+
+          if (data['missionLogs'] != null) {
+            final List<dynamic> decodedLogs = data['missionLogs'];
+            missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
+          }
+
+          // Catch-up logic for AI Auto-sales
+          if (lastSaved != null) {
+            _processOfflineSales(lastSaved);
+          }
+
+          await _ensureUserDefaults(uid);
+          isNewUser = false;
+        } else {
+          isNewUser = true;
+          companyName = _generateRandomCompanyName();
+        }
+        _isInitialized = true;
+
+      } on TimeoutException {
+        initError = "ERR_TIMEOUT: No response from Mars Relay.";
+        _currentUid = null;
+      } catch (e) {
+        initError = "ERR_INITIALIZATION: ${e.toString()}";
+        _currentUid = null;
+      } finally {
+        isLoading = false;
+        notifyListeners();
+      }
     }
-  }
 
   Future<void> signInWithGoogle() async {
     try {
@@ -490,13 +486,12 @@ class GameState extends ChangeNotifier {
       bool changesMade = false;
       
       // Auto-refresh missions
-      if (nextMissionRefresh != null && now.isAfter(nextMissionRefresh!)) {
-        generateNewMissions();
-        changesMade = true;
-      } else if (nextMissionRefresh == null) {
-        // If null (fresh start without load), set it now or generate
-        // Usually generateNewMissions sets it.
-      }
+        if (nextMissionRefresh == null) {
+          generateNewMissions();
+        } else if (now.isAfter(nextMissionRefresh!)) {
+          generateNewMissions();
+          changesMade = true;
+        }
 
       for (var ship in fleet) {
         if (ship.missionEndTime != null && now.isAfter(ship.missionEndTime!)) {
@@ -518,7 +513,7 @@ class GameState extends ChangeNotifier {
 
   void _startMarketLoop() {
     _marketTimer?.cancel();
-    _marketTimer = Timer.periodic(const Duration(minutes: 15), (timer) {
+    _marketTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (ore > 0 || gas > 0 || crystals > 0) {
         _performAutoSell();
       }
@@ -526,7 +521,6 @@ class GameState extends ChangeNotifier {
   }
 
   void _performAutoSell() {
-    // Use your actual price getter to fetch current market values
     Map<String, int> currentPrices = {
       'Ore': getResourcePrice('Ore'),
       'Gas': getResourcePrice('Gas'),
@@ -534,20 +528,28 @@ class GameState extends ChangeNotifier {
     };
 
     final result = GameFormulas.calculateOnlineAutoSale(
-      ore: ore,
-      gas: gas,
-      crystals: crystals,
+      ore: ore, gas: gas, crystals: crystals,
       tradeDepotLevel: tradeDepotLevel,
       maxStorage: maxStorage,
-      marketPrices: currentPrices, // Pass the dynamic prices here
+      marketPrices: currentPrices,
     );
 
-    ore -= result['soldOre']!;
-    gas -= result['soldGas']!;
-    crystals -= result['soldCrystals']!;
-    solars += result['revenue']!;
+    if (result['revenue']! > 0) {
+      ore -= result['soldOre']!;
+      gas -= result['soldGas']!;
+      crystals -= result['soldCrystals']!;
+      solars += result['revenue']!;
 
-    _triggerUpdate(); // Redraws UI and saves to Firestore
+      _addLog(LogEntry(
+        timestamp: DateTime.now(),
+        title: "AI Trade Update",
+        details: "Depot AI liquidated surplus: ${result['soldOre']} Ore, ${result['soldGas']} Gas.",
+        solarChange: result['revenue'],
+        isPositive: true,
+      ));
+
+      _triggerUpdate();
+    }
   }
 
   void manualSellAll() {
@@ -618,8 +620,6 @@ class GameState extends ChangeNotifier {
       final now = DateTime.now();
       final ship = fleet[shipIndex];
 
-      // 1. CALCULATE DURATION FIRST
-      // This replaces all your manual speed/aiMult/factor math
       Duration missionDuration = GameFormulas.calculateMissionDuration(
         distanceAU: mission.distanceAU,
         speed: ship.speed,
@@ -629,32 +629,28 @@ class GameState extends ChangeNotifier {
         shipClass: ship.shipClass,
       );
 
-      // 2. SET TIMING DATA
       ship.missionStartTime = now;
       ship.missionEndTime = now.add(missionDuration);
 
-      // 3. STORE MISSION DATA (For Ops Screen Detail Sheet)
+      // CRITICAL FIX: Explicitly capture every reward field from the Mission object
       ship.currentMissionName = mission.title;
-      ship.pendingResourceType = mission.rewardResource;
       ship.pendingReward = mission.rewardSolars;
+      ship.pendingResource = mission.rewardResource; // Ensure this isn't null
       ship.pendingResourceAmount = mission.rewardResourceAmount;
 
-      // 4. MANAGE MISSION BOARD
       availableMissions.removeWhere((m) => m.id == mission.id);
 
-      // Replace basic missions so the board stays full
+      // Restore local runs if applicable
       if (mission.title.contains("Local Scrap Run")) {
         availableMissions.add(_missionService.getLocalScrapRun());
       } else if (mission.title.contains("Local Courier Run")) {
         availableMissions.add(_missionService.getLocalCourierRun());
       }
 
-      // 5. LOG THE LAUNCH
       _addLog(LogEntry(
         timestamp: now,
         title: "Mission Launched",
-        // Using missionDuration.inSeconds ensures the log matches the actual timer
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}. ETA: ${missionDuration.inSeconds}s",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}.",
         isPositive: true,
       ));
 
@@ -665,10 +661,10 @@ class GameState extends ChangeNotifier {
   void _processMissionCompletion(Ship ship) {
     totalContracts++;
 
-    // 1. Ask the Authority for the results
+    // 1. Calculate final results via GameFormulas
     final results = GameFormulas.calculateFullMissionResults(
       pendingReward: ship.pendingReward,
-      pendingResource: ship.pendingResource,
+      pendingResource: ship.pendingResource, // Use the String? stored in ship
       pendingResourceAmount: ship.pendingResourceAmount,
       aiLevel: ship.aiLevel,
       isElite: ship.isMaxed,
@@ -678,32 +674,49 @@ class GameState extends ChangeNotifier {
       maxStorage: maxStorage,
     );
 
-    // 2. Apply the changes to the State
+    // 2. Apply Solars
     solars += results.totalSolars;
 
+    // 3. Apply Physical Resources to State
     if (results.resourceAmount > 0) {
-      if (results.resourceType == 'Ore') ore += results.resourceAmount;
-      if (results.resourceType == 'Gas') gas += results.resourceAmount;
-      if (results.resourceType == 'Crystals') crystals += results.resourceAmount;
+      switch (results.resourceType) {
+        case 'Ore':
+          ore += results.resourceAmount;
+          break;
+        case 'Gas':
+          gas += results.resourceAmount;
+          break;
+        case 'Crystals':
+          crystals += results.resourceAmount;
+          break;
+      }
     }
 
-    // 3. Update the Log (All info comes from results)
+    // 4. Build detailed Log String
     String earnings = "⁂${results.baseReward}";
-    if (results.brandReachBonus > 0) earnings += " + ⁂${results.brandReachBonus} (Brand Reach)";
-    if (results.vanguardHonorarium > 0) earnings += " + ⁂${results.vanguardHonorarium} (Vanguard Honorarium)";
-    if (results.resourceAmount > 0) earnings += " + ${results.resourceAmount}m³ ${results.resourceType}";
-    if (results.overflowSolars > 0) earnings += "\n(⚠️ Storage Full: Sold overflow for ⁂${results.overflowSolars})";
+    if (results.brandReachBonus > 0) earnings += " + ⁂${results.brandReachBonus} (Reach)";
+    if (results.vanguardHonorarium > 0) earnings += " + ⁂${results.vanguardHonorarium} (Elite)";
 
-    // 4. Finalize Wear & Tear and Cleanup (Existing logic)
+    // Explicitly check if resources were added or sold as overflow
+    if (results.resourceAmount > 0) {
+      earnings += " + ${results.resourceAmount}m³ ${results.resourceType}";
+    }
+
+    if (results.overflowSolars > 0) {
+      earnings += "\n⚠️ Storage Full: ${results.resourceType} sold for ⁂${results.overflowSolars}";
+    }
+
     _applyHullWear(ship);
+
     _addLog(LogEntry(
       timestamp: DateTime.now(),
-      title: "Mission Return: ${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname}",
-      details: "Earnings: $earnings.",
+      title: "Mission Return: ${ship.nickname}",
+      details: "Earnings: $earnings",
       isPositive: true,
     ));
 
-    ship.clearMissionData(); // Helpful to move cleanup to a helper in ship_model
+    // 5. Cleanup ship memory
+    ship.clearMissionData();
     _triggerUpdate();
   }
 
@@ -1252,7 +1265,7 @@ class GameState extends ChangeNotifier {
   Future<void> nuclearReset() async {
     if (_currentUid == null) return;
     try {
-      // 1. Wipe Cloud and Local
+      // 1. Wipe Cloud and Local Storage
       await FirebaseFirestore.instance.collection('users').doc(_currentUid).delete();
       await FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid).delete();
       final prefs = await SharedPreferences.getInstance();
@@ -1262,16 +1275,35 @@ class GameState extends ChangeNotifier {
       _gameTimer?.cancel();
       _marketTimer?.cancel();
 
-      // 3. NEW: WIPE MEMORY
+      // 3. HARD RESET all primitive variables to Level 1 / 0
+      solars = 50000;
+      ore = 0; gas = 0; crystals = 0;
+      hangarLevel = 1;
+      relayLevel = 1;
+      serverFarmLevel = 0;
+      tradeDepotLevel = 1;
+      repairGantryLevel = 0;
+      broadcastingArrayLevel = 1;
+      tradeDepotPrestige = 0;
+      broadcastingArrayPrestige = 0;
+      serverFarmPrestige = 0;
+      totalContracts = 0;
+      hasNamedCompany = false;
+
+      // 4. Reset the Fleet and Logs
       fleet = [];
       missionLogs = [];
       availableMissions = [];
+
+      // 5. Re-inject the Rusty Scow immediately
+      _setupStarterShip();
+
       _isInitialized = false;
 
-      // 4. LOG OUT
+      // 6. Log Out
       await signOut();
 
-      debugPrint("COREY_LOG: System Purged and Memory Wiped.");
+      notifyListeners(); // Force the UI to see the reset state
     } catch (e) {
       debugPrint("COREY_LOG: Reset failed: $e");
     }
@@ -1281,9 +1313,9 @@ class GameState extends ChangeNotifier {
     final now = DateTime.now();
     int minutesAway = now.difference(lastSaved).inMinutes;
 
-    if (minutesAway < 1) return; // Not gone long enough for a tick
+    if (minutesAway < 1) return;
 
-    // 1. Run the simulation through GameFormulas
+    // 1. Run the simulation
     final result = GameFormulas.calculateOfflineAutoSales(
       minutesAway: minutesAway,
       startOre: ore,
@@ -1296,15 +1328,16 @@ class GameState extends ChangeNotifier {
         'Gas': getResourcePrice('Gas'),
         'Crystals': getResourcePrice('Crystals'),
       },
-    );
+    ); // <--- Close the GameFormulas call here
 
-    // 2. Extract and apply
+    // 2. Extract results
     ore = result['newOre'];
     gas = result['newGas'];
     crystals = result['newCrystals'];
     int revenue = result['totalRevenue'];
     int processed = result['minutesProcessed'];
 
+    // 3. Add the Log separately
     if (revenue > 0) {
       solars += revenue;
       _addLog(LogEntry(
