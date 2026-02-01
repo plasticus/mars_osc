@@ -74,26 +74,54 @@ class MissionLogsScreen extends StatelessWidget {
     );
   }
 
+// Locate the _buildHiddenResetButton method in mission_logs_screen.dart and update it:
+
   Widget _buildHiddenResetButton(BuildContext context, GameState state) {
     return Padding(
-      padding: const EdgeInsets.only(top: 40, bottom: 80), // Added more bottom padding
+      padding: const EdgeInsets.only(top: 40, bottom: 80),
       child: Center(
-        child: Opacity(
-          opacity: 0.8, // CRANKED UP: Change 0.15 to 0.8 for testing
-          child: Container(
-            color: Colors.red.withValues(alpha: 0.2), // ADDED: Slight red box for visibility
-            child: TextButton(
-              onPressed: () => _showResetDialog(context, state),
-              child: const Text(
-                "SYSTEM_PURGE_PROTOCOL_v1.0.6",
-                style: TextStyle(
-                    color: Colors.white, // Changed to white for testing
-                    fontSize: 10,
-                    letterSpacing: 2
+        child: Column(
+          children: [
+            // Existing Purge Button
+            Opacity(
+              opacity: 0.8,
+              child: Container(
+                color: Colors.red.withValues(alpha: 0.2),
+                child: TextButton(
+                  onPressed: () => _showResetDialog(context, state),
+                  child: const Text(
+                    "SYSTEM_PURGE_PROTOCOL_v1.0.6",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        letterSpacing: 2
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 20), // Spacing between buttons
+            // NEW Debug Button
+            Opacity(
+              opacity: 0.6,
+              child: TextButton(
+                onPressed: () {
+                  state.generateNewMissions(); // Calls your existing 2-hour logic
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("DEBUG: Contract Board Replenished"))
+                  );
+                },
+                child: const Text(
+                  "DEBUG: Contracts Reset",
+                  style: TextStyle(
+                    color: Colors.cyanAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

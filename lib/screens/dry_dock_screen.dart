@@ -158,7 +158,7 @@ class ShipCard extends StatelessWidget {
                           ],
                           Flexible(
                             child: Text(
-                              ship.nickname, 
+                              ship.nickname,
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
