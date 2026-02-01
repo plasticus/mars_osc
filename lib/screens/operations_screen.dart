@@ -134,8 +134,12 @@ class ShipSummaryCard extends StatelessWidget {
             onTap: () => _showShipDetails(context, ship),
             title: Row(
               children: [
+                if (ship.isMaxed) ...[
+                  const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 18),
+                  const SizedBox(width: 8),
+                ],
                 Text(
-                  "${ship.isMaxed ? '💎 ' : ''}${ship.nickname}",
+                  ship.nickname,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: ship.isMaxed ? Colors.cyanAccent : null,
@@ -270,7 +274,8 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            const Text("💎 ", style: TextStyle(fontSize: 20)),
+            const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 24),
+            const SizedBox(width: 12),
             Text("$shipClass Elite Attributes"),
           ],
         ),

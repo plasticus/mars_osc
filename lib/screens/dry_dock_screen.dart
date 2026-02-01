@@ -152,9 +152,13 @@ class ShipCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
+                          if (isElite) ...[
+                            const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 20),
+                            const SizedBox(width: 8),
+                          ],
                           Flexible(
                             child: Text(
-                              "${isElite ? '💎 ' : ''}${ship.nickname}",
+                              ship.nickname, 
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
