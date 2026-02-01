@@ -91,10 +91,10 @@ class EngineeringScreen extends StatelessWidget {
           maxLevel: 5,
           infoLine: "Max Storage: ${state.maxStorage} m³",
           upgrades: {
-            2: _BaseUpgradeData(12000, "Max 1000 m³ + Auto-Sell @ 110%"),
-            3: _BaseUpgradeData(35000, "Max 1500 m³ + Auto-Sell @ 115%"),
-            4: _BaseUpgradeData(60000, "Max 2000 m³ + Auto-Sell @ 120%"),
-            5: _BaseUpgradeData(100000, "Max 2500 m³ + Auto-Sell @ 125%"),
+            2: _BaseUpgradeData(12000, "Max 1000 m³, Auto-Sell @ 110%, & Auto-Sell +1% m3"),
+            3: _BaseUpgradeData(35000, "Max 1500 m³, Auto-Sell @ 115%, & Auto-Sell +1% m3"),
+            4: _BaseUpgradeData(60000, "Max 2000 m³, Auto-Sell @ 120%, & Auto-Sell +1% m3"),
+            5: _BaseUpgradeData(100000, "Max 2500 m³, Auto-Sell @ 125%, & Auto-Sell +1% m3"),
           },
           onUpgrade: (cost) => state.upgradeBase('Depot', cost),
           onOpen: () {

@@ -263,6 +263,7 @@ static String generateLegacyName() {
         maxStorage: maxStorage,
         prices: marketPrices,
         multiplier: multiplier,
+        tradeDepotLevel: tradeDepotLevel,
       );
 
       currentOre -= result['soldOre']!;
@@ -298,6 +299,7 @@ static String generateLegacyName() {
       maxStorage: maxStorage,
       prices: marketPrices,
       multiplier: multiplier,
+      tradeDepotLevel: tradeDepotLevel,
     );
   }
 
@@ -308,10 +310,15 @@ static String generateLegacyName() {
     required int maxStorage,
     required Map<String, int> prices,
     required double multiplier,
+    required int tradeDepotLevel,
   }) {
     Random rng = Random();
-    double quotaPercent = 0.006 + (rng.nextDouble() * 0.004);
+    double basePercent = tradeDepotLevel * 0.01; //trade depot level affects the amount sold
+    double variance = (rng.nextDouble() * 0.004) - 0.002;
+    double quotaPercent = basePercent + variance;
+
     int totalQuota = (maxStorage * quotaPercent).round();
+    totalQuota = max(1, totalQuota); // Ensure at least 1 unit is sold
 
     int targetPerType = (totalQuota / 3).floor();
 
