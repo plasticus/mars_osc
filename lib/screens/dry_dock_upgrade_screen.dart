@@ -157,9 +157,9 @@ class _UpgradeRow extends StatelessWidget {
             // Flavor text only for vessels that received a Legacy Name from the crew
             if (ship.renameLocked && ship.hasBeenRenamed) ...[
               const Text("Notice:", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              const Text(
+              Text(
                 "Since no custom designation was assigned prior, the Captain has issued a new name (${ship.nickname}) to honor this vessel's service.",
-                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.white70),
+                style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.white70),
               ),
             ]
           ],
