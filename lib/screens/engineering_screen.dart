@@ -10,7 +10,6 @@ class EngineeringScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
 
-
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -19,6 +18,7 @@ class EngineeringScreen extends StatelessWidget {
           icon: Icons.home_repair_service,
           currentLevel: state.hangarLevel,
           maxLevel: 5,
+          infoLine: "Hangar Space: ${state.fleet.length} / ${state.maxFleetSize}",
           upgrades: {
             2: _BaseUpgradeData(5000, "+2 Ship Slots (4 total)"),
             3: _BaseUpgradeData(15000, "+2 Ship Slots (6 total)"),
@@ -27,48 +27,50 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Hangar', cost),
         ),
-
         _UpgradeCard(
           title: "Deep-Space Relay",
           icon: Icons.settings_remote,
           currentLevel: state.relayLevel,
           maxLevel: 4,
+          infoLine: _relayUnlockedLine(state.relayLevel),
           upgrades: {
-            2: _BaseUpgradeData(10000, "Unlocks Class: Miner + Belt missions"),
-            3: _BaseUpgradeData(30000, "Unlocks Class: Tanker + Gas missions"),
-            4: _BaseUpgradeData(75000, "Unlocks Class: Harvester + Rift missions"),
+            2: _BaseUpgradeData(10000, "Unlocks Class: Miner + Belt contracts"),
+            3: _BaseUpgradeData(30000, "Unlocks Class: Tanker + Gas contracts"),
+            4: _BaseUpgradeData(75000, "Unlocks Class: Harvester + Rift contracts"),
           },
           onUpgrade: (cost) => state.upgradeBase('Relay', cost),
         ),
-
         _UpgradeCard(
           title: "Broadcasting Array",
           icon: Icons.radar,
           currentLevel: state.broadcastingArrayLevel,
           maxLevel: 5,
           infoLine: state.broadcastingArrayPrestige > 0
-              ? "Bonus Mission Value: +${(state.broadcastingArrayPrestige * 0.1).toStringAsFixed(1)}%"
-              : null,
+              ? "Contracts per category: ${state.contractsPerCategory} "
+                  "(+${state.bonusContractsPerCategory})\n"
+                  "Bonus Contract Value: +${state.broadcastingArrayValueBonusPct.toStringAsFixed(1)}%"
+              : "Contracts per category: ${state.contractsPerCategory} "
+                  "(+${state.bonusContractsPerCategory})",
           upgrades: {
-            2: _BaseUpgradeData(7500, "+2 Missions per category"),
-            3: _BaseUpgradeData(25000, "+2 Missions per category"),
-            4: _BaseUpgradeData(60000, "+2 Missions per category"),
-            5: _BaseUpgradeData(120000, "+2 Missions per category (Max 10/cat)"),
+            2: _BaseUpgradeData(7500, "+2 Contracts per category"),
+            3: _BaseUpgradeData(25000, "+2 Contracts per category"),
+            4: _BaseUpgradeData(60000, "+2 Contracts per category"),
+            5: _BaseUpgradeData(120000, "+2 Contracts per category (Max 10/cat)"),
           },
           onUpgrade: (cost) => state.upgradeBase('Broadcasting', cost),
           prestigeTitle: "Brand Reach",
           prestigeLevel: state.broadcastingArrayPrestige,
-          prestigeEffect: "+0.1% Mission Value",
+          prestigeEffect: "+0.1% Contract Value",
           prestigeCost: state.getBroadcastingArrayPrestigeCost(),
           onPrestigeUpgrade: () => state.upgradeBroadcastingArrayPrestige(),
         ),
-
         _UpgradeCard(
           title: "Neural Server Farm",
           icon: Icons.memory,
           currentLevel: state.serverFarmLevel,
           maxLevel: 3,
-          infoLine: "Current Fleet AI Bonus: **+${state.globalAIBonus.toStringAsFixed(1)}**\n"
+          infoLine:
+              "Current Fleet AI Bonus: **+${state.globalAIBonus.toStringAsFixed(1)}**\n"
               "Contract Speed Bonus: +${(state.globalAIBonus * 0.5).toStringAsFixed(1)}%",
           upgrades: {
             1: _BaseUpgradeData(8000, "All Fleet AI +0.5"),
@@ -76,26 +78,29 @@ class EngineeringScreen extends StatelessWidget {
             3: _BaseUpgradeData(50000, "All Fleet AI +2.0"),
           },
           onUpgrade: (cost) => state.upgradeBase('Server', cost),
-
           prestigeTitle: "AI-Improved Routing",
           prestigeLevel: state.serverFarmPrestige,
           prestigeEffect: "+0.1% Travel Speed",
           prestigeCost: state.getServerFarmPrestigeCost(),
           onPrestigeUpgrade: () => state.upgradeServerFarmPrestige(),
         ),
-
-
         _UpgradeCard(
           title: "Trade Depot / Silos",
           icon: Icons.store,
           currentLevel: state.tradeDepotLevel,
           maxLevel: 5,
-          infoLine: "Max Storage: ${state.maxStorage} m³",
+          infoLine: "Storage: ${state.maxStorage} m³\n"
+              "Depot AI Auto-Sell Price: +${state.tradeDepotAutoSellPriceBonusPct}%\n"
+              "Depot AI Auto-Sell Volume: ~${state.tradeDepotAutoSellQuotaUnitsPerTickBase}/tick",
           upgrades: {
-            2: _BaseUpgradeData(12000, "Max 1000 m³, Auto-Sell @ 110%, & Auto-Sell +1% m3"),
-            3: _BaseUpgradeData(35000, "Max 1500 m³, Auto-Sell @ 115%, & Auto-Sell +1% m3"),
-            4: _BaseUpgradeData(60000, "Max 2000 m³, Auto-Sell @ 120%, & Auto-Sell +1% m3"),
-            5: _BaseUpgradeData(100000, "Max 2500 m³, Auto-Sell @ 125%, & Auto-Sell +1% m3"),
+            2: _BaseUpgradeData(
+                12000, "Max 1000 m³, Auto-Sell @ 110%, & Auto-Sell +1% m3"),
+            3: _BaseUpgradeData(
+                35000, "Max 1500 m³, Auto-Sell @ 115%, & Auto-Sell +1% m3"),
+            4: _BaseUpgradeData(
+                60000, "Max 2000 m³, Auto-Sell @ 120%, & Auto-Sell +1% m3"),
+            5: _BaseUpgradeData(
+                100000, "Max 2500 m³, Auto-Sell @ 125%, & Auto-Sell +1% m3"),
           },
           onUpgrade: (cost) => state.upgradeBase('Depot', cost),
           onOpen: () {
@@ -105,20 +110,18 @@ class EngineeringScreen extends StatelessWidget {
             );
           },
           openLabel: "ENTER DEPOT",
-
-          // Prestige (only used once base maxed)
           prestigeTitle: "Overflow Storage",
           prestigeLevel: state.tradeDepotPrestige,
           prestigeEffect: "+100 m³ Storage",
           prestigeCost: state.getTradeDepotPrestigeCost(),
           onPrestigeUpgrade: () => state.upgradeTradeDepotPrestige(),
         ),
-
         _UpgradeCard(
           title: "Repair Gantry",
           icon: Icons.construction,
           currentLevel: state.repairGantryLevel,
           maxLevel: 3,
+          infoLine: _gantryInfoLine(state.repairGantryLevel),
           upgrades: {
             1: _BaseUpgradeData(6000, "-10% Maintenance Fees"),
             2: _BaseUpgradeData(18000, "-25% Maintenance Fees"),
@@ -189,9 +192,20 @@ class _UpgradeCard extends StatelessWidget {
     final bool canAffordPrestige =
         prestigeReady && state.solars >= (prestigeCost ?? 0);
 
-    final String rightLabel = prestigeReady
-        ? "Prestige ${prestigeLevel!}"
-        : "Lv. $currentLevel";
+    final String rightLabel = prestigeReady ? "Prestige ${prestigeLevel!}" : "Lv. $currentLevel";
+
+    Widget centeredWidthButton({
+      required double widthFactor,
+      required Widget child,
+    }) {
+      return Align(
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * widthFactor,
+          child: child,
+        ),
+      );
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -219,13 +233,13 @@ class _UpgradeCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: infoLine!.split('\n').map((line) {
-                  bool isAI = line.contains("AI Bonus");
+                  final bool isAI = line.contains("AI Bonus");
                   return Text(
                     line.replaceAll('**', ''),
                     style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white70,
-                        fontWeight: isAI ? FontWeight.bold : FontWeight.w500
+                      fontSize: 13,
+                      color: Colors.white70,
+                      fontWeight: isAI ? FontWeight.bold : FontWeight.w500,
                     ),
                   );
                 }).toList(),
@@ -233,12 +247,12 @@ class _UpgradeCard extends StatelessWidget {
               const SizedBox(height: 12),
             ],
 
-            // Open button (like ENTER DEPOT)
+            // Open button (ENTER DEPOT) — 70% width
             if (onOpen != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16.0),
-                child: SizedBox(
-                  width: double.infinity,
+                child: centeredWidthButton(
+                  widthFactor: 0.7,
                   child: ElevatedButton(
                     onPressed: onOpen,
                     style: ElevatedButton.styleFrom(
@@ -262,8 +276,10 @@ class _UpgradeCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
+
+              // Upgrade button — 80% width
+              centeredWidthButton(
+                widthFactor: 0.8,
                 child: ElevatedButton.icon(
                   onPressed: canAffordUpgrade ? () => onUpgrade(upgradeData.cost) : null,
                   icon: const Icon(Icons.arrow_upward, size: 16),
@@ -287,8 +303,10 @@ class _UpgradeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
-              SizedBox(
-                width: double.infinity,
+
+              // Prestige button — 80% width
+              centeredWidthButton(
+                widthFactor: 0.8,
                 child: ElevatedButton.icon(
                   onPressed: canAffordPrestige ? onPrestigeUpgrade : null,
                   icon: const Icon(Icons.auto_awesome, size: 16),
@@ -310,4 +328,21 @@ class _UpgradeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _relayUnlockedLine(int relayLevel) {
+  final unlocked = <String>["Mule", "Sprinter"];
+
+  if (relayLevel >= 2) unlocked.add("Miner");
+  if (relayLevel >= 3) unlocked.add("Tanker");
+  if (relayLevel >= 4) unlocked.add("Harvester");
+
+  return "Unlocked: ${unlocked.join(', ')}";
+}
+
+String _gantryInfoLine(int gantryLevel) {
+  if (gantryLevel >= 3) return "Maintenance Fees: -25%\nRepair Speed: 2x";
+  if (gantryLevel == 2) return "Maintenance Fees: -25%";
+  if (gantryLevel == 1) return "Maintenance Fees: -10%";
+  return "Maintenance Fees: 0%";
 }

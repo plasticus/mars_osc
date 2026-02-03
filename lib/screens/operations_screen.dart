@@ -377,8 +377,8 @@ class _ShipDetailSheetState extends State<ShipDetailSheet> {
                               baseReward: ship.pendingReward,
                               aiLevel: ship.aiLevel,
                               isElite: ship.isMaxed,
-                              modelName: ship.modelName, // Added this
-                              broadcastingPrestige: state.broadcastingArrayPrestige // Added this
+                              modelName: ship.modelName,
+                              broadcastingPrestige: state.broadcastingArrayPrestige
                           )}",
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.greenAccent)
                       ),

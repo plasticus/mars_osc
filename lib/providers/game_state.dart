@@ -462,6 +462,23 @@ class GameState extends ChangeNotifier {
     return 0.0;
   }
 
+  // Trade Depot: UI-facing bonus summaries (based on GameFormulas logic)
+  int get tradeDepotAutoSellPriceBonusPct => tradeDepotLevel * 5; // 0.05 per level
+  int get tradeDepotAutoSellVolumeBonusPct => tradeDepotLevel * 1; // 0.01 per level (base)
+  int get tradeDepotAutoSellQuotaUnitsPerTickBase {
+    final basePercent = tradeDepotLevel * 0.01;
+    return (maxStorage * basePercent).round();
+  }
+
+  int get contractsPerCategory {
+    // Based on your upgrade text: +2 per level, max 10/cat at level 5
+    // L1=2, L2=4, L3=6, L4=8, L5=10
+    final perCat = 2 + ((broadcastingArrayLevel - 1) * 2);
+    return perCat.clamp(2, 10);
+  }
+  int get bonusContractsPerCategory => contractsPerCategory - 2;
+  double get broadcastingArrayValueBonusPct => broadcastingArrayPrestige * 0.1;
+
   double get repairCostMultiplier {
     if (repairGantryLevel == 1) return 0.90;
     if (repairGantryLevel == 2) return 0.75;
