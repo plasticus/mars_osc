@@ -14,6 +14,21 @@ import 'dart:async';
 
 const bool enableDebugButtons = !bool.fromEnvironment('dart.vm.product');
 
+final _cloudSaveDebouncer = Debouncer(delay: const Duration(seconds: 30));
+// This waits for 30 seconds of "silence" before syncing to the cloud.
+
+class Debouncer {
+  final Duration delay;
+  Timer? _timer;
+
+  Debouncer({required this.delay});
+
+  void run(VoidCallback action) {
+    _timer?.cancel(); // Cancel the old timer if it's still running
+    _timer = Timer(delay, action); // Start a new one
+  }
+}
+
 /// Data class for Mission Logs
 class LogEntry {
   final DateTime timestamp;
@@ -219,55 +234,88 @@ class GameState extends ChangeNotifier {
   // --- AUTHENTICATION & CLOUD SESSION ---
 
   Future<void> initializeUserSession(String uid) async {
-    _currentUid = uid; // <-- add this
+    // Prevent re-entry / duplicate loads
+    if (_currentUid == uid && _isInitialized) return;
+
+    _currentUid = uid;
     isLoading = true;
-    initError = "STATUS: INITIALIZING_LINK...";
+    initError = "STATUS: CONTACTING_MARS_RELAY...";
     notifyListeners();
 
     try {
-      // MOVE THIS HERE: Ensure it's before the Firestore .get() call
-      initError = "STATUS: CONTACTING_MARS_RELAY...";
-      notifyListeners();
+      final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final snap = await docRef.get();
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get()
-          .timeout(const Duration(seconds: 10));
+      if (snap.exists && snap.data() != null) {
+        // Existing user: load cloud data
+        final data = snap.data()!;
+        _applyCloudData(data);
 
-      if (userDoc.exists) {
-        initError = "STATUS: DOWNLOADING_CORP_DATA...";
-        notifyListeners();
-
-        final data = userDoc.data()!;
-        // ... (Your existing data mapping logic here) ...
-
-        initError = "STATUS: VERIFYING_REGISTRY...";
-        notifyListeners();
+        // Make sure any *new* fields get added without overwriting existing ones
         await _ensureUserDefaults(uid);
-
-        isNewUser = false;
-        _isInitialized = true;
       } else {
-        initError = "STATUS: GENERATING_NEW_MANIFEST...";
-        notifyListeners();
+        // Brand new user: create defaults once
+        await _ensureUserDefaults(uid);
         isNewUser = true;
-        companyName = _generateRandomCompanyName();
       }
 
-      initError = null; // Clear on success
-      _isInitialized = true;
+      // Save local snapshot so "resume" is instant (and survives process death)
+      final prefs = await SharedPreferences.getInstance();
+      await _saveLocal(prefs);
 
-    } on TimeoutException {
-      initError = "ERR_TIMEOUT: Relay connection lost in deep space.";
-      _currentUid = null;
-    } catch (e) {
-      initError = "ERR_FAILURE: ${e.toString()}";
-      _currentUid = null;
-    } finally {
       isLoading = false;
+      initError = null;
+      _isInitialized = true;
+      notifyListeners();
+    } catch (e) {
+      isLoading = false;
+      initError = "ERROR: ${e.toString()}";
       notifyListeners();
     }
+  }
+
+  void _applyCloudData(Map<String, dynamic> data) {
+    // Simple fields
+    companyName = (data['companyName'] as String?) ?? companyName;
+    solars = (data['solars'] as int?) ?? solars;
+    crystals = (data['crystals'] as int?) ?? crystals;
+
+    hangarLevel = (data['hangarLevel'] as int?) ?? hangarLevel;
+    relayLevel = (data['relayLevel'] as int?) ?? relayLevel;
+
+    tradeDepotLevel = (data['tradeDepotLevel'] as int?) ?? tradeDepotLevel;
+    tradeDepotPrestige = (data['tradeDepotPrestige'] as int?) ?? tradeDepotPrestige;
+
+    broadcastingArrayLevel = (data['broadcastingArrayLevel'] as int?) ?? broadcastingArrayLevel;
+    broadcastingArrayPrestige = (data['broadcastingArrayPrestige'] as int?) ?? broadcastingArrayPrestige;
+
+    serverFarmLevel = (data['serverFarmLevel'] as int?) ?? serverFarmLevel;
+    serverFarmPrestige = (data['serverFarmPrestige'] as int?) ?? serverFarmPrestige;
+
+    repairGantryLevel = (data['repairGantryLevel'] as int?) ?? repairGantryLevel;
+
+    // Dates / timers (stored as ISO strings typically)
+    final nextRefreshStr = data['nextMissionRefresh'] as String?;
+    if (nextRefreshStr != null) {
+      nextMissionRefresh = DateTime.tryParse(nextRefreshStr) ?? nextMissionRefresh;
+    }
+
+    // Fleet
+    final fleetList = data['fleet'];
+    if (fleetList is List) {
+      try {
+        fleet = (fleetList as List)
+            .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+
+        // If your Firestore fleet entries are `Map<dynamic,dynamic>`:
+        // .map((m) => Ship.fromMap(Map<String, dynamic>.from(m)))
+      } catch (_) {
+        // If fleet parsing fails, don’t wipe the player’s current fleet
+      }
+    }
+
+    // Mission logs, contracts, etc — do the same pattern here if you store them
   }
 
   Future<void> signInWithGoogle() async {
@@ -320,100 +368,143 @@ class GameState extends ChangeNotifier {
   // --- PERSISTENCE LOGIC (Dual Support) ---
 
   Future<void> _saveData() async {
-    if (!_isInitialized || _currentUid == null) return;
+    // If we haven't loaded at least once, don't write anything yet.
+    if (!_isInitialized) return;
 
-    int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
+    final prefs = await SharedPreferences.getInstance();
 
-    // Add the Engineering investment to the total
-    int engineeringValue = calculateBaseUpgradeInvestment();
-    int netWorth = solars + fleetValue + engineeringValue;
+    // ✅ Persist LOCAL first so you don't "reset" on restart/background-kill.
+    await _saveLocal(prefs);
 
-    // 2. Find Single Most Valuable Ship
-    Ship? topShip;
-    int topShipValue = 0;
-    if (fleet.isNotEmpty) {
-      topShip = fleet.reduce((a, b) => getShipSaleValue(a) > getShipSaleValue(b) ? a : b);
-      topShipValue = getShipSaleValue(topShip);
-    }
+    // If not signed in yet, we can't sync to cloud (local is still saved).
+    if (_currentUid == null) return;
+
+    final int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
+
+    final Map<String, dynamic> cloudData = {
+      'companyName': companyName,
+      'solars': solars,
+      'crystals': crystals,
+      'ore': ore,
+      'maxStorage': maxStorage,
+      'contractsPerCategory': contractsPerCategory,
+      'bonusContractsPerCategory': bonusContractsPerCategory,
+      'nextMissionRefresh': nextMissionRefresh?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'hangarLevel': hangarLevel,
+      'relayLevel': relayLevel,
+      'broadcastingArrayLevel': broadcastingArrayLevel,
+      'broadcastingArrayPrestige': broadcastingArrayPrestige,
+      'broadcastingArrayValueBonusPct': broadcastingArrayValueBonusPct,
+      'serverFarmLevel': serverFarmLevel,
+      'serverFarmPrestige': serverFarmPrestige,
+      'tradeDepotLevel': tradeDepotLevel,
+      'tradeDepotPrestige': tradeDepotPrestige,
+      'repairGantryLevel': repairGantryLevel,
+      'fleet': fleet.map((ship) => ship.toJson()).toList(),
+      'fleetValue': fleetValue,
+      'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
 
     try {
-      final batch = FirebaseFirestore.instance.batch();
-      final userRef = FirebaseFirestore.instance.collection('users').doc(_currentUid);
-      batch.set(userRef, {
-        'companyName': companyName,
-        'hasNamedCompany': hasNamedCompany,
-        'lastSaved': FieldValue.serverTimestamp(),
-
-        'solars': solars,
-        'ore': ore,
-        'gas': gas,
-        'crystals': crystals,
-
-        // Engineering
-        'hangarLevel': hangarLevel,
-        'relayLevel': relayLevel,
-        'serverFarmLevel': serverFarmLevel,
-        'tradeDepotLevel': tradeDepotLevel,
-        'repairGantryLevel': repairGantryLevel,
-        'broadcastingArrayLevel': broadcastingArrayLevel,
-        //Leaderboard stuff
-        'totalContracts': totalContracts,
-        'fleet': fleet.map((s) => s.toJson()).toList(),
-        'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
-        // Prestige levels
-        'tradeDepotPrestige': tradeDepotPrestige,
-        'broadcastingArrayPrestige': broadcastingArrayPrestige,
-        'serverFarmPrestige': serverFarmPrestige,
-        // Mission Timer
-        'nextMissionRefresh': nextMissionRefresh?.toIso8601String(),
-      }, SetOptions(merge: true));
-
-
-      // 3. Update the Leaderboard with your 4 categories
-      final leadRef = FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid);
-      batch.set(leadRef, {
-        'companyName': companyName,
-        'cashOnHand': solars,            // Category 1
-        'netWorth': netWorth,             // Category 2
-        'topShipNickname': topShip?.nickname ?? "N/A", // Category 3
-        'topShipClass': topShip?.shipClass ?? "N/A",
-        'topShipValue': topShipValue,
-        'totalContracts': totalContracts, // Category 4
-        'lastUpdate': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await batch.commit();
-    } catch (e) {
-      debugPrint("Leaderboard Sync Error: $e");
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUid)
+          .set(cloudData, SetOptions(merge: true));
+    } catch (_) {
+      // Cloud sync failure should never wipe local progress.
     }
   }
 
+  // Add near the top of GameState
+  Timer? _localSaveDebounce;
+
+  void _scheduleLocalSave() {
+    _localSaveDebounce?.cancel();
+    _localSaveDebounce = Timer(const Duration(milliseconds: 400), () async {
+      final prefs = await SharedPreferences.getInstance();
+      await _saveLocal(prefs);
+    });
+  }
+
+  Future<void> _saveLocal(SharedPreferences prefs) async {
+    final local = <String, dynamic>{
+      'companyName': companyName,
+      'solars': solars,
+      'crystals': crystals,
+      'hangarLevel': hangarLevel,
+      'relayLevel': relayLevel,
+      'tradeDepotLevel': tradeDepotLevel,
+      'tradeDepotPrestige': tradeDepotPrestige,
+      'broadcastingArrayLevel': broadcastingArrayLevel,
+      'broadcastingArrayPrestige': broadcastingArrayPrestige,
+      'serverFarmLevel': serverFarmLevel,
+      'serverFarmPrestige': serverFarmPrestige,
+      'repairGantryLevel': repairGantryLevel,
+      'nextMissionRefresh': (nextMissionRefresh ?? DateTime.now()).toIso8601String(),
+
+      // Fleet stored as JSON-able maps
+      'fleet': fleet.map((s) => s.toJson()).toList(),
+    };
+
+    await prefs.setString('mosc_save', jsonEncode(local));
+  }
+
   Future<void> _loadData() async {
-    // Standard Local Load (Used on startup before Auth)
+    // Local load so you can resume instantly even before Firebase Auth finishes.
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (!prefs.containsKey('solars')) return;
 
-      solars = prefs.getInt('solars') ?? 50000;
-      ore = prefs.getInt('ore') ?? 0;
-      gas = prefs.getInt('gas') ?? 0;
-      crystals = prefs.getInt('crystals') ?? 0;
-      hangarLevel = prefs.getInt('hangarLevel') ?? 1;
-      relayLevel = prefs.getInt('relayLevel') ?? 1;
-      hasNamedCompany = prefs.getBool('hasNamedCompany') ?? false;
-      
+      companyName = prefs.getString('companyName') ?? companyName;
+
+      solars = prefs.getInt('solars') ?? solars;
+      ore = prefs.getInt('ore') ?? ore;
+      crystals = prefs.getInt('crystals') ?? crystals;
+      hangarLevel = prefs.getInt('hangarLevel') ?? hangarLevel;
+      relayLevel = prefs.getInt('relayLevel') ?? relayLevel;
+
+      broadcastingArrayLevel = prefs.getInt('broadcastingArrayLevel') ?? broadcastingArrayLevel;
+      broadcastingArrayPrestige =
+          prefs.getInt('broadcastingArrayPrestige') ?? broadcastingArrayPrestige;
+
+      serverFarmLevel = prefs.getInt('serverFarmLevel') ?? serverFarmLevel;
+      serverFarmPrestige = prefs.getInt('serverFarmPrestige') ?? serverFarmPrestige;
+
+      tradeDepotLevel = prefs.getInt('tradeDepotLevel') ?? tradeDepotLevel;
+      tradeDepotPrestige = prefs.getInt('tradeDepotPrestige') ?? tradeDepotPrestige;
+
+      repairGantryLevel = prefs.getInt('repairGantryLevel') ?? repairGantryLevel;
+
       final refreshString = prefs.getString('nextMissionRefresh');
       if (refreshString != null) {
         nextMissionRefresh = DateTime.tryParse(refreshString);
       }
 
+      // Fleet
       final fleetString = prefs.getString('fleet');
-      if (fleetString != null) {
-        final List<dynamic> decoded = jsonDecode(fleetString);
-        fleet = decoded.map((item) => Ship.fromJson(item)).toList();
+      if (fleetString != null && fleetString.isNotEmpty) {
+        final decoded = jsonDecode(fleetString);
+        if (decoded is List) {
+          fleet = decoded
+              .whereType<Map>()
+              .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
+              .toList();
+        }
       }
-    } catch (e) {
-      debugPrint("Local Load Error: $e");
+
+      // Mission logs
+      final logsString = prefs.getString('missionLogs');
+      if (logsString != null && logsString.isNotEmpty) {
+        final decoded = jsonDecode(logsString);
+        if (decoded is List) {
+          missionLogs = decoded
+              .whereType<Map>()
+              .map((m) => LogEntry.fromJson(Map<String, dynamic>.from(m)))
+              .toList();
+        }
+      }
+    } catch (_) {
+      // If local load fails for any reason, we fall back to defaults.
     }
   }
 
@@ -436,9 +527,16 @@ class GameState extends ChangeNotifier {
   }
 
   void _triggerUpdate() {
-    if (_isInitialized) {
-      _saveData();
+    // 1. Save locally. We fetch the instance right here.
+    SharedPreferences.getInstance().then((prefs) {
+      _saveLocal(prefs);
+    });
+
+    // 2. Schedule cloud sync with the debouncer
+    if (_currentUid != null) {
+      _cloudSaveDebouncer.run(() => _saveData());
     }
+
     notifyListeners();
   }
 
@@ -995,6 +1093,8 @@ class GameState extends ChangeNotifier {
 
       _triggerUpdate();
     }
+    _scheduleLocalSave();
+    notifyListeners();
   }
 
   int getTradeDepotPrestigeCost() {

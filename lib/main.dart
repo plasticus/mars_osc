@@ -69,8 +69,12 @@ class AuthWrapper extends StatelessWidget {
           final state = context.read<GameState>();
 
           // Trigger the session init if we haven't already
-          if (state.user != null && state.currentUid == null) {
-            Future.microtask(() => state.initializeUserSession(snapshot.data!.uid));
+          final uid = snapshot.data!.uid;
+
+          // Trigger session init any time we have a logged-in user but GameState
+          // isn't initialized for THIS uid yet.
+          if (state.currentUid != uid && !state.isLoading) {
+            Future.microtask(() => state.initializeUserSession(uid));
           }
 
           // For checking loading/error state, we need a separate consumer
