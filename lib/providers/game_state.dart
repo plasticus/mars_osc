@@ -70,7 +70,7 @@ class GameState extends ChangeNotifier {
   // --- NEW USER FLOW VARIABLES ---
   bool isNewUser = false;
   String? initError;
-  bool isLoading = true;
+  bool isLoading = false;
 
   // Resource Inventory
   int ore = 0;
@@ -160,15 +160,26 @@ class GameState extends ChangeNotifier {
 
 
   GameState() {
-    // Initial local load for faster startup (data is overwritten by Firestore on auth)
-    _loadData().then((_) {
+    // Load local data first (fast startup)
+    _loadData().then((_) async {
       _isInitialized = true;
+
       if (fleet.isEmpty) {
         _setupStarterShip();
       }
+
       _startGameLoop();
       _startMarketLoop();
-      notifyListeners();
+
+      // If already signed in, initialize cloud session; otherwise show login UI
+      final u = FirebaseAuth.instance.currentUser;
+      if (u != null) {
+        await initializeUserSession(u.uid);
+      } else {
+        isLoading = false;
+        initError = null;
+        notifyListeners();
+      }
     });
   }
 
@@ -206,14 +217,13 @@ class GameState extends ChangeNotifier {
   // --- AUTHENTICATION & CLOUD SESSION ---
 
   Future<void> initializeUserSession(String uid) async {
-    if (_currentUid == uid && !_isInitialized) return;
-    _currentUid = uid;
-
+    _currentUid = uid; // <-- add this
     isLoading = true;
-    initError = "STATUS: INITIALIZING_LINK..."; // Initial status
+    initError = "STATUS: INITIALIZING_LINK...";
     notifyListeners();
 
     try {
+      // MOVE THIS HERE: Ensure it's before the Firestore .get() call
       initError = "STATUS: CONTACTING_MARS_RELAY...";
       notifyListeners();
 

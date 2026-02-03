@@ -21,18 +21,17 @@ class LoginScreen extends StatelessWidget {
     );
   }
 
+// Inside login_screen.dart
   Widget _buildBody(BuildContext context, GameState state) {
-    // 1. Handle Active Errors (Timeout/Connection Fail)
-    if (state.initError != null) {
+    if (state.initError != null && !state.isLoading) { // Show error if not loading
       return _buildErrorState(state);
     }
 
-    // 2. Handle Loading (The "Establishing Link" Phase)
     if (state.isLoading) {
-      return _buildLoadingState();
+      // FIX: Pass the 'state' variable here
+      return _buildLoadingState(state);
     }
 
-    // 3. Standard Login UI
     return _buildLoginUI(state);
   }
 
