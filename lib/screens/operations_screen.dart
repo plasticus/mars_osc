@@ -44,7 +44,7 @@ class OperationsScreen extends StatelessWidget {
                     children: [
                       if (state.ore > 0) _ResourceChip(icon: Icons.landscape, label: "Ore", value: state.ore, color: Colors.brown),
                       if (state.gas > 0) _ResourceChip(icon: Icons.cloud, label: "Gas", value: state.gas, color: Colors.cyan),
-                      if (state.crystals > 0) _ResourceChip(icon: Icons.shield_moon, label: "Crystals", value: state.crystals, color: Colors.purpleAccent),
+                      if (state.crystals > 0) _ResourceChip(icon: Icons.diamond, label: "Crystals", value: state.crystals, color: Colors.purpleAccent),
                     ],
                   ),
                   const SizedBox(height: 8),

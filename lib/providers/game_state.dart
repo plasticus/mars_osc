@@ -954,15 +954,37 @@ class GameState extends ChangeNotifier {
   void upgradeBase(String type, int cost) {
     if (solars >= cost) {
       solars -= cost;
+      int newLevel = 0; // Track the new level to log it clearly
+
       if (type == 'Hangar') {
         hangarLevel++;
-      } else if (type == 'Relay') relayLevel++;
-      else if (type == 'Server') serverFarmLevel++;
-      else if (type == 'Depot') tradeDepotLevel++;
-      else if (type == 'Gantry') repairGantryLevel++;
-      else if (type == 'Broadcasting') broadcastingArrayLevel++;
+        newLevel = hangarLevel;
+      } else if (type == 'Relay') {
+        relayLevel++;
+        newLevel = relayLevel;
+      } else if (type == 'Server') {
+        serverFarmLevel++;
+        newLevel = serverFarmLevel;
+      } else if (type == 'Depot') {
+        tradeDepotLevel++;
+        newLevel = tradeDepotLevel;
+      } else if (type == 'Gantry') {
+        repairGantryLevel++;
+        newLevel = repairGantryLevel;
+      } else if (type == 'Broadcasting') {
+        broadcastingArrayLevel++;
+        newLevel = broadcastingArrayLevel;
+      }
 
-      _addLog(LogEntry(timestamp: DateTime.now(), title: "Base Upgraded", details: "$type reached Level ${[hangarLevel, relayLevel, serverFarmLevel, tradeDepotLevel, repairGantryLevel, broadcastingArrayLevel].join(', ')}", solarChange: -cost, isPositive: false));
+      // Updated Log: Only shows the facility upgraded and its specific new level
+      _addLog(LogEntry(
+        timestamp: DateTime.now(),
+        title: "Base Upgraded",
+        details: "$type reached Level $newLevel",
+        solarChange: -cost,
+        isPositive: false,
+      ));
+
       _triggerUpdate();
     }
   }
@@ -1348,6 +1370,30 @@ class GameState extends ChangeNotifier {
         isPositive: true,
       ));
     }
+  }
+
+  Widget _getLogLeadingIcon(LogEntry entry) {
+    // Define mapping for titles to specific icons
+    if (entry.title.contains("ELITE")) {
+      return const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 24);
+    } else if (entry.title.contains("Base Upgraded")) {
+      return const Icon(Icons.architecture, color: Colors.orangeAccent, size: 24);
+    } else if (entry.title.contains("Mission Launched")) {
+      return const Icon(Icons.rocket_launch, color: Colors.blueAccent, size: 24);
+    } else if (entry.title.contains("Mission Return")) {
+      return const Icon(Icons.assignment_turned_in, color: Colors.greenAccent, size: 24);
+    } else if (entry.title.contains("Trade") || entry.title.contains("Market")) {
+      return const Icon(Icons.currency_exchange, color: Colors.amberAccent, size: 24);
+    } else if (entry.title.contains("Repair")) {
+      return const Icon(Icons.build, color: Colors.lightBlueAccent, size: 24);
+    }
+
+    // Fallback to your existing logic if no title matches
+    return Icon(
+      entry.isPositive ? Icons.check_circle : Icons.warning,
+      color: entry.isPositive ? Colors.green : Colors.orange,
+      size: 24,
+    );
   }
 
   @override

@@ -68,7 +68,8 @@ class EngineeringScreen extends StatelessWidget {
           icon: Icons.memory,
           currentLevel: state.serverFarmLevel,
           maxLevel: 3,
-          infoLine: "Contract Speed Bonus: +${(state.serverFarmPrestige * 0.1).toStringAsFixed(1)}%",
+          infoLine: "Current Fleet AI Bonus: **+${state.globalAIBonus.toStringAsFixed(1)}**\n"
+              "Contract Speed Bonus: +${(state.globalAIBonus * 0.5).toStringAsFixed(1)}%",
           upgrades: {
             1: _BaseUpgradeData(8000, "All Fleet AI +0.5"),
             2: _BaseUpgradeData(20000, "All Fleet AI +1.0"),
@@ -76,7 +77,7 @@ class EngineeringScreen extends StatelessWidget {
           },
           onUpgrade: (cost) => state.upgradeBase('Server', cost),
 
-          prestigeTitle: "Contract Overclock",
+          prestigeTitle: "AI-Improved Routing",
           prestigeLevel: state.serverFarmPrestige,
           prestigeEffect: "+0.1% Travel Speed",
           prestigeCost: state.getServerFarmPrestigeCost(),
@@ -215,9 +216,19 @@ class _UpgradeCard extends StatelessWidget {
 
             // Info line always visible when provided
             if (infoLine != null) ...[
-              Text(
-                infoLine!,
-                style: const TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: infoLine!.split('\n').map((line) {
+                  bool isAI = line.contains("AI Bonus");
+                  return Text(
+                    line.replaceAll('**', ''),
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white70,
+                        fontWeight: isAI ? FontWeight.bold : FontWeight.w500
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 12),
             ],
@@ -248,7 +259,7 @@ class _UpgradeCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 upgradeData.effect,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 16),
               SizedBox(

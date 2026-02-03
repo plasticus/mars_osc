@@ -155,7 +155,7 @@ class _UpgradeRow extends StatelessWidget {
             _buildEliteFeature(Icons.verified, "Legacy Designation", "Vessel identity locked into corporate history."),
             const SizedBox(height: 16),
             // Flavor text only for vessels that received a Legacy Name from the crew
-            if (ship.renameLocked && ship.hasBeenRenamed) ...[
+            if (ship.renameLocked && !ship.hasBeenRenamed) {
               const Text("Notice:", style: TextStyle(color: Colors.grey, fontSize: 12)),
               Text(
                 "Since no custom designation was assigned prior, the Captain has issued a new name (${ship.nickname}) to honor this vessel's service.",
