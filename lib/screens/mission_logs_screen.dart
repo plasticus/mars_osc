@@ -47,10 +47,7 @@ class MissionLogsScreen extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: Colors.black26,
             child: ListTile(
-              leading: Icon(
-                log.isPositive ? Icons.check_circle : Icons.warning,
-                color: log.isPositive ? Colors.green : Colors.orange,
-              ),
+              leading: _getLogLeadingIcon(log),
               title: Text(log.title,
                   style: const TextStyle(fontWeight: FontWeight.bold)
               ),
@@ -71,6 +68,30 @@ class MissionLogsScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _getLogLeadingIcon(LogEntry entry) {
+    // Define mapping for titles to specific icons
+    if (entry.title.contains("ELITE")) {
+      return const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 24);
+    } else if (entry.title.contains("Base Upgraded")) {
+      return const Icon(Icons.architecture, color: Colors.orangeAccent, size: 24);
+    } else if (entry.title.contains("Mission Launched")) {
+      return const Icon(Icons.rocket_launch, color: Colors.blueAccent, size: 24);
+    } else if (entry.title.contains("Mission Return")) {
+      return const Icon(Icons.assignment_turned_in, color: Colors.greenAccent, size: 24);
+    } else if (entry.title.contains("Trade") || entry.title.contains("Market")) {
+      return const Icon(Icons.currency_exchange, color: Colors.amberAccent, size: 24);
+    } else if (entry.title.contains("Repair")) {
+      return const Icon(Icons.build, color: Colors.lightBlueAccent, size: 24);
+    }
+
+    // Fallback to your existing logic if no title matches
+    return Icon(
+      entry.isPositive ? Icons.check_circle : Icons.warning,
+      color: entry.isPositive ? Colors.green : Colors.orange,
+      size: 24,
     );
   }
 
@@ -126,6 +147,8 @@ class MissionLogsScreen extends StatelessWidget {
       ),
     );
   }
+
+
 
   void _showResetDialog(BuildContext context, GameState state) {
     showDialog(
