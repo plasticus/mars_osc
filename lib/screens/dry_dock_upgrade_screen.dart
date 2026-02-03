@@ -148,21 +148,21 @@ class _UpgradeRow extends StatelessWidget {
             const Divider(height: 32, color: Colors.white10),
             const Text("Attributes Gained:", style: TextStyle(color: Colors.grey, fontSize: 12)),
             const SizedBox(height: 8),
-          // Inside _showEliteTransformationDialog in dry_dock_upgrade_screen.dart
             _buildEliteFeature(Icons.timer, "Priority Docking", "Significantly faster mission turnaround."),
             _buildEliteFeature(Icons.trending_up, "Vanguard Honorarium", "Increased ⁂ Solars on all contracts."),
             _buildEliteFeature(Icons.analytics, "Bleeding Edge Tech", "Maximum appraisal value for corporate assets."),
             _buildEliteFeature(Icons.verified, "Legacy Designation", "Vessel identity locked into corporate history."),
             const SizedBox(height: 16),
-            // Flavor text only for vessels that received a Legacy Name from the crew
+            // Your Fixed Logic Block
             if (ship.renameLocked && !ship.hasBeenRenamed) ...[
               const Text("Notice:", style: TextStyle(color: Colors.grey, fontSize: 12)),
               Text(
-               "Since no custom designation was assigned prior, the Captain has issued a new name (${ship.nickname}) to honor this vessel's service.",
-              style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.white70),
-            ),
+                "Since no custom designation was assigned prior, the Captain has issued a new name (${ship.nickname}) to honor this vessel's service.",
+                style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.white70),
+              ),
+            ],
           ],
-        ),
+        ), // This closing parenthesis for Column was missing
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

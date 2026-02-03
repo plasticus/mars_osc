@@ -106,6 +106,11 @@ class GameState extends ChangeNotifier {
   DateTime? nextMissionRefresh; // New field for timer
 
   Future<void> _ensureUserDefaults(String uid) async {
+    if (companyName == "Establishing Link..." || companyName == "Searching Registry...") {
+      debugPrint("⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
+      return;
+    }
+
     final ref = FirebaseFirestore.instance.collection('users').doc(uid);
 
     final snap = await ref.get();
@@ -201,83 +206,57 @@ class GameState extends ChangeNotifier {
   // --- AUTHENTICATION & CLOUD SESSION ---
 
   Future<void> initializeUserSession(String uid) async {
-      if (_currentUid == uid) return;
-      _currentUid = uid;
+    if (_currentUid == uid && !_isInitialized) return;
+    _currentUid = uid;
 
-      isLoading = true;
-      initError = null;
+    isLoading = true;
+    initError = "STATUS: INITIALIZING_LINK..."; // Initial status
+    notifyListeners();
+
+    try {
+      initError = "STATUS: CONTACTING_MARS_RELAY...";
       notifyListeners();
 
-      try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get()
-            .timeout(const Duration(seconds: 10));
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 10));
 
-        if (userDoc.exists) {
-          final data = userDoc.data()!;
-
-          companyName = data['companyName'] ?? "Searching Registry...";
-          hasNamedCompany = data['hasNamedCompany'] ?? false;
-          solars = data['solars'] ?? 50000;
-          ore = data['ore'] ?? 0;
-          gas = data['gas'] ?? 0;
-          crystals = data['crystals'] ?? 0;
-          hangarLevel = data['hangarLevel'] ?? 1;
-          relayLevel = data['relayLevel'] ?? 1;
-          serverFarmLevel = data['serverFarmLevel'] ?? 0;
-          tradeDepotLevel = data['tradeDepotLevel'] ?? 1;
-          repairGantryLevel = data['repairGantryLevel'] ?? 0;
-          broadcastingArrayLevel = data['broadcastingArrayLevel'] ?? 1;
-          tradeDepotPrestige = data['tradeDepotPrestige'] ?? 0;
-          broadcastingArrayPrestige = data['broadcastingArrayPrestige'] ?? 0;
-          serverFarmPrestige = data['serverFarmPrestige'] ?? 0;
-          totalContracts = data['totalContracts'] ?? 0;
-
-          DateTime? lastSaved;
-          if (data['lastSaved'] != null) {
-            lastSaved = (data['lastSaved'] as Timestamp).toDate();
-          }
-
-          if (data['nextMissionRefresh'] != null) {
-            nextMissionRefresh = DateTime.tryParse(data['nextMissionRefresh']);
-          }
-
-          if (data['fleet'] != null) {
-            final List<dynamic> decodedFleet = data['fleet'];
-            fleet = decodedFleet.map((item) => Ship.fromJson(item)).toList();
-          }
-
-          if (data['missionLogs'] != null) {
-            final List<dynamic> decodedLogs = data['missionLogs'];
-            missionLogs = decodedLogs.map((item) => LogEntry.fromJson(item)).toList();
-          }
-
-          // Catch-up logic for AI Auto-sales
-          if (lastSaved != null) {
-            _processOfflineSales(lastSaved);
-          }
-
-          await _ensureUserDefaults(uid);
-          isNewUser = false;
-        } else {
-          isNewUser = true;
-          companyName = _generateRandomCompanyName();
-        }
-        _isInitialized = true;
-
-      } on TimeoutException {
-        initError = "ERR_TIMEOUT: No response from Mars Relay.";
-        _currentUid = null;
-      } catch (e) {
-        initError = "ERR_INITIALIZATION: ${e.toString()}";
-        _currentUid = null;
-      } finally {
-        isLoading = false;
+      if (userDoc.exists) {
+        initError = "STATUS: DOWNLOADING_CORP_DATA...";
         notifyListeners();
+
+        final data = userDoc.data()!;
+        // ... (Your existing data mapping logic here) ...
+
+        initError = "STATUS: VERIFYING_REGISTRY...";
+        notifyListeners();
+        await _ensureUserDefaults(uid);
+
+        isNewUser = false;
+        _isInitialized = true;
+      } else {
+        initError = "STATUS: GENERATING_NEW_MANIFEST...";
+        notifyListeners();
+        isNewUser = true;
+        companyName = _generateRandomCompanyName();
       }
+
+      initError = null; // Clear on success
+      _isInitialized = true;
+
+    } on TimeoutException {
+      initError = "ERR_TIMEOUT: Relay connection lost in deep space.";
+      _currentUid = null;
+    } catch (e) {
+      initError = "ERR_FAILURE: ${e.toString()}";
+      _currentUid = null;
+    } finally {
+      isLoading = false;
+      notifyListeners();
     }
+  }
 
   Future<void> signInWithGoogle() async {
     try {

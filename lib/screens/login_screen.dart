@@ -7,83 +7,112 @@ class LoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.read<GameState>();
+    // We use context.watch here so the UI rebuilds when GameState updates
+    final state = context.watch<GameState>();
 
     return Scaffold(
       backgroundColor: const Color(0xFF1E1E1E),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                  Icons.rocket_launch,
-                  size: 80,
-                  color: Colors.deepOrange
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                "MARS ORBITAL\nSHIPPING CO.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2.0,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 64),
-
-              // Google Sign In Button with Troubleshooting
-              ElevatedButton.icon(
-                onPressed: () async {
-                  try {
-                    debugPrint("COREY_LOG: Starting Google Sign-In...");
-                    await state.signInWithGoogle();
-                  } catch (e) {
-                    debugPrint("COREY_LOG: Login Error: $e");
-
-                    // Show full error on screen so we can see the code (e.g., 10 or 12500)
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("COMMAND LINK FAILED: $e"),
-                          backgroundColor: Colors.red.shade900,
-                          duration: const Duration(seconds: 15),
-                          action: SnackBarAction(
-                            label: 'RETRY',
-                            textColor: Colors.white,
-                            onPressed: () {},
-                          ),
-                        ),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.login),
-                label: const Text("CONNECT GOOGLE ACCOUNT"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-              const Text(
-                "ENCRYPTED AUTHENTICATION REQUIRED",
-                style: TextStyle(
-                  color: Colors.white24,
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
+          child: _buildBody(context, state),
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, GameState state) {
+    // 1. Handle Active Errors (Timeout/Connection Fail)
+    if (state.initError != null) {
+      return _buildErrorState(state);
+    }
+
+    // 2. Handle Loading (The "Establishing Link" Phase)
+    if (state.isLoading) {
+      return _buildLoadingState();
+    }
+
+    // 3. Standard Login UI
+    return _buildLoginUI(state);
+  }
+
+  Widget _buildLoadingState(GameState state) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const CircularProgressIndicator(color: Colors.deepOrange),
+        const SizedBox(height: 24),
+        Text(
+            state.initError ?? "ESTABLISHING LINK...",
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.white70,
+                letterSpacing: 1.5,
+                fontSize: 10,
+                fontFamily: 'monospace' // Makes it look like a terminal
+            )
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorState(GameState state) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.signal_wifi_off, size: 64, color: Colors.redAccent),
+        const SizedBox(height: 24),
+        Text(state.initError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70)),
+        const SizedBox(height: 32),
+        ElevatedButton(
+          onPressed: () => state.initializeUserSession(state.currentUid!),
+          child: const Text("RETRY COMMAND LINK"),
+        ),
+        const SizedBox(height: 16),
+        TextButton(
+          onPressed: () => state.setInitialCompanyName(state.companyName),
+          child: const Text("ABANDON LINK & START NEW CORP",
+              style: TextStyle(color: Colors.white24, fontSize: 10)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginUI(GameState state) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.rocket_launch, size: 80, color: Colors.deepOrange),
+        const SizedBox(height: 24),
+        const Text(
+          "MARS ORBITAL\nSHIPPING CO.",
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2.0,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 64),
+        ElevatedButton.icon(
+          onPressed: () async => await state.signInWithGoogle(),
+          icon: const Icon(Icons.login),
+          label: const Text("CONNECT GOOGLE ACCOUNT"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            minimumSize: const Size(double.infinity, 50),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          "ENCRYPTED AUTHENTICATION REQUIRED",
+          style: TextStyle(color: Colors.white24, fontSize: 10, letterSpacing: 1.2),
+        ),
+      ],
     );
   }
 }
