@@ -2,12 +2,13 @@ name: mars_osc
 description: "Mars Orbital Shipping Company"
 publish_to: 'none'
 
-version: 0.95.02
+version: 0.95.2+3
 
 environment:
   sdk: ^3.5.0
 
 dependencies:
+  package_info_plus: ^8.0.0
   flutter:
     sdk: flutter
 

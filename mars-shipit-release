@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# 1. Extraction (Save the OLD_VER for the announcement)
+OLD_VER=$(grep "version: " pubspec.yaml | cut -d' ' -f2)
+
+# 2. RUN THE BUILD FIRST
+echo "🛠️ Starting Flutter Build..."
+flutter build apk --split-per-abi
+
+# Check if the build failed
+if [ $? -ne 0 ]; then
+    echo "❌ Build failed! Version number will NOT be upgraded."
+    exit 1
+fi
+
+# 3. CALCULATE NEW VERSION (Only if build passed)
+MAJOR=$(echo $OLD_VER | cut -d. -f1)
+MINOR=$(echo $OLD_VER | cut -d. -f2)
+PATCH=$(echo $OLD_VER | cut -d. -f3)
+
+NEW_PATCH=$(printf "%02d" $((10#$PATCH + 1)))
+NEW_VER="$MAJOR.$MINOR.$NEW_PATCH"
+
+# 4. APPLY UPDATE
+sed -i "s/version: .*/version: $NEW_VER/" pubspec.yaml
+echo "🚀 Mars OSC Updated: $OLD_VER -> $NEW_VER"
+
+# 5. INSTALL TO PHONE
+adb -s 4C201FDAP000DG install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk

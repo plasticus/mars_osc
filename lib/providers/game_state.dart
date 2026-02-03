@@ -12,6 +12,8 @@ import '../utils/game_formulas.dart';
 import 'dart:math';
 import 'dart:async';
 
+const bool enableDebugButtons = !bool.fromEnvironment('dart.vm.product');
+
 /// Data class for Mission Logs
 class LogEntry {
   final DateTime timestamp;
