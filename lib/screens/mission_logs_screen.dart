@@ -148,7 +148,7 @@ class MissionLogsScreen extends StatelessWidget {
       width: 250,
       height: 45,
       decoration: BoxDecoration(
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
         borderRadius: BorderRadius.circular(8),
         color: color.withOpacity(0.1),
       ),
@@ -255,6 +255,7 @@ class _LogCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           _formatTime(log.timestamp),
                           style: TextStyle(color: Colors.grey[600], fontSize: 10),
@@ -297,9 +298,9 @@ class _LogCard extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 margin: const EdgeInsets.only(left: 4),
                                 decoration: BoxDecoration(
-                                  color: efficiencyColor.withOpacity(0.1),
+                                  color: efficiencyColor.withValues(alpha:0.1),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: efficiencyColor.withOpacity(0.5)),
+                                  border: Border.all(color: efficiencyColor.withValues(alpha: 0.5)),
                                 ),
                                 child: Text(
                                   efficiencyText,

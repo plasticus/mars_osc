@@ -17,8 +17,6 @@ import 'dart:async';
 
 const bool enableDebugButtons = !bool.fromEnvironment('dart.vm.product');
 
-final _cloudSaveDebouncer = Debouncer(delay: const Duration(seconds: 30));
-
 void _applyHullWear(Ship ship) {
   double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
   wear = max(wear, (ship.missionDistance ?? 1.0) * 0.0005) * (0.8 + Random().nextDouble() * 0.4);
@@ -41,6 +39,12 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   bool isNewUser = false;
   String? initError;
   bool isLoading = false;
+  bool get hasLocalSave => _hasLocalSave;
+  bool autoCloudBackupEnabled = false;
+  bool _loopsStarted = false;
+  bool _hasLocalSave = false;
+
+
 
   // Resource Inventory
   int ore = 0;
@@ -77,7 +81,9 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   bool isBetaTiming = true;
 
   DateTime? nextMissionRefresh;
-  DateTime _lastActiveTime = DateTime.now(); // NEW FIELD FOR OFFLINE CALC
+  DateTime _lastActiveTime = DateTime.now();
+  DateTime _lastLeaderboardWrite = DateTime.fromMillisecondsSinceEpoch(0);
+
 
   void forceRefresh() {
     notifyListeners();
@@ -129,6 +135,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
   GameState() {
     WidgetsBinding.instance.addObserver(this);
+
     // 1. Initialize Trading Service with Callback
     _tradingService = TradingHubService(
       onTradeExecuted: (revenue, dOre, dGas, dCrystals, logEntry) {
@@ -138,7 +145,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         crystals += dCrystals;
         if (logEntry != null) _addLog(logEntry);
         _triggerUpdate();
-      }
+      },
     );
 
     // 2. Load Local Data
@@ -153,50 +160,59 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         generateNewMissions();
       }
 
-      // 3. EXECUTE OFFLINE CATCHUP *BEFORE* STARTING GAME LOOP
-      // This ensures storage is cleared before ships land.
-      _tradingService.processOfflineCatchup(
-        lastActiveTime: _lastActiveTime,
-        tradeDepotLevel: tradeDepotLevel,
-        maxStorage: maxStorage,
-        ore: ore,
-        gas: gas,
-        crystals: crystals
-      );
+      // ✅ Local load finished.
+      isLoading = false;
+      initError = null;
+      notifyListeners();
 
-      // 4. Start Loops
-      _startGameLoop();
-
-      // Start the new Trading Hub loop
-      _tradingService.startTradingLoop(
-        requestCurrentState: () => {
-          'level': tradeDepotLevel,
-          'maxStorage': maxStorage,
-          'ore': ore,
-          'gas': gas,
-          'crystals': crystals,
-        }
-      );
-
-      // 5. Auth Check
-      final u = FirebaseAuth.instance.currentUser;
-      if (u != null) {
-        await initializeUserSession(u.uid);
-      } else {
-        isLoading = false;
-        initError = null;
-        notifyListeners();
-      }
     });
   }
 
+  Future<void> connectCloudSession(String uid) async {
+    if (_currentUid == uid && _isInitialized) return;
+
+    _currentUid = uid;
+    isLoading = true;
+    initError = "STATUS: CONTACTING_MARS_RELAY...";
+    notifyListeners();
+
+    try {
+      final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final snap = await docRef.get();
+
+      // Only ensure defaults / new-user detection.
+      // DO NOT apply cloud data into the game state here.
+      if (!snap.exists) {
+        await _ensureUserDefaults(uid);
+        isNewUser = true;
+      } else {
+        await _ensureUserDefaults(uid);
+        isNewUser = false;
+      }
+
+      isLoading = false;
+      initError = null;
+      _isInitialized = true;
+      notifyListeners();
+    } catch (e) {
+      isLoading = false;
+      initError = "ERROR: ${e.toString()}";
+      notifyListeners();
+    }
+  }
+
+
   @override
     void didChangeAppLifecycleState(AppLifecycleState state) {
-      if (state == AppLifecycleState.paused) {
-        // User left the app: Save now to lock in the "Last Active" time
-        debugPrint("⏸️ App Paused: Saving State...");
-        _triggerUpdate();
-      }
+    if (state == AppLifecycleState.paused) {
+      debugPrint("⏸️ App Paused: Saving State...");
+      Future.microtask(() async {
+        final prefs = await SharedPreferences.getInstance();
+        await _saveLocal(prefs);       // force local save now
+        await syncLeaderboardNow();    // cheap + throttled
+      });
+    }
+
 
       if (state == AppLifecycleState.resumed) {
         // User came back: Run the Catch-up logic!
@@ -252,177 +268,68 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> initializeUserSession(String uid) async {
-    if (_currentUid == uid && _isInitialized) return;
 
-    _currentUid = uid;
-    isLoading = true;
-    initError = "STATUS: CONTACTING_MARS_RELAY...";
-    notifyListeners();
-
-    try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
-      final snap = await docRef.get();
-
-      if (snap.exists && snap.data() != null) {
-        final data = snap.data()!;
-        _applyCloudData(data);
-        await _ensureUserDefaults(uid);
-      } else {
-        await _ensureUserDefaults(uid);
-        isNewUser = true;
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await _saveLocal(prefs);
-
-      isLoading = false;
-      initError = null;
-      _isInitialized = true;
-      notifyListeners();
-    } catch (e) {
-      isLoading = false;
-      initError = "ERROR: ${e.toString()}";
-      notifyListeners();
-    }
-  }
-
-  void _applyCloudData(Map<String, dynamic> data) {
-    companyName = (data['companyName'] as String?) ?? companyName;
-    solars = (data['solars'] as int?) ?? solars;
-    crystals = (data['crystals'] as int?) ?? crystals;
-    ore = (data['ore'] as int?) ?? ore;
-    gas = (data['gas'] as int?) ?? gas;
-
-    hangarLevel = (data['hangarLevel'] as int?) ?? hangarLevel;
-    relayLevel = (data['relayLevel'] as int?) ?? relayLevel;
-    tradeDepotLevel = (data['tradeDepotLevel'] as int?) ?? tradeDepotLevel;
-    tradeDepotPrestige = (data['tradeDepotPrestige'] as int?) ?? tradeDepotPrestige;
-    broadcastingArrayLevel = (data['broadcastingArrayLevel'] as int?) ?? broadcastingArrayLevel;
-    broadcastingArrayPrestige = (data['broadcastingArrayPrestige'] as int?) ?? broadcastingArrayPrestige;
-    serverFarmLevel = (data['serverFarmLevel'] as int?) ?? serverFarmLevel;
-    serverFarmPrestige = (data['serverFarmPrestige'] as int?) ?? serverFarmPrestige;
-    repairGantryLevel = (data['repairGantryLevel'] as int?) ?? repairGantryLevel;
-
-    final nextRefreshStr = data['nextMissionRefresh'] as String?;
-    if (nextRefreshStr != null) {
-      nextMissionRefresh = DateTime.tryParse(nextRefreshStr) ?? nextMissionRefresh;
-    }
-
-    // Cloud overrides local time if valid
-    final lastActiveStr = data['lastActiveTime'] as String?;
-    if (lastActiveStr != null) {
-       // We only use this if we didn't just load a fresher one from local,
-       // but generally local is king for "last time I closed the app".
-    }
-
-    final fleetList = data['fleet'];
-    if (fleetList is List) {
-      try {
-        fleet = (fleetList as List)
-            .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
-            .toList();
-      } catch (_) {}
-    }
-  }
 
   Future<void> signInWithGoogle() async {
     final userCredential = await AuthService.signInWithGoogle();
     if (userCredential?.user != null) {
-      await initializeUserSession(userCredential!.user!.uid);
+      await connectCloudSession(userCredential!.user!.uid);
     }
   }
 
   Future<void> signOut() async {
     await AuthService.signOut();
     _currentUid = null;
-    _isInitialized = false;
+    // keep _isInitialized as-is
     notifyListeners();
   }
 
-  Future<void> _saveData() async {
-      if (!_isInitialized) return;
+  Future<void> syncLeaderboardNow() async {
+    if (_currentUid == null) return;
 
-      // 1. Local Save (Keep this)
-      final prefs = await SharedPreferences.getInstance();
-      await _saveLocal(prefs);
+    final now = DateTime.now();
+    // Hard throttle: no more than once every 2 minutes
+    if (now.difference(_lastLeaderboardWrite).inSeconds < 120) return;
 
-      if (_currentUid == null) return;
+    // Calculate fleet value (you already do this in _saveData)
+    final int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
 
-      // 2. Prepare User Data (Keep this)
-      final int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
-
-      // Calculate Top Ship for Leaderboard
-      Ship? topShip;
-      int topShipVal = 0;
-      if (fleet.isNotEmpty) {
-        // Find the single most valuable ship
-        for (var s in fleet) {
-          int val = getShipSaleValue(s);
-          if (val > topShipVal) {
-            topShipVal = val;
-            topShip = s;
-          }
-        }
-      }
-
-      // Main User Data Cloud Payload
-      final Map<String, dynamic> cloudData = {
-        'companyName': companyName,
-        'solars': solars,
-        'crystals': crystals,
-        'ore': ore,
-        'gas': gas,
-        'maxStorage': maxStorage,
-        'contractsPerCategory': contractsPerCategory,
-        'bonusContractsPerCategory': bonusContractsPerCategory,
-        'nextMissionRefresh': nextMissionRefresh?.toIso8601String() ?? DateTime.now().toIso8601String(),
-        'lastActiveTime': _lastActiveTime.toIso8601String(),
-        'hangarLevel': hangarLevel,
-        'relayLevel': relayLevel,
-        'broadcastingArrayLevel': broadcastingArrayLevel,
-        'broadcastingArrayPrestige': broadcastingArrayPrestige,
-        'broadcastingArrayValueBonusPct': broadcastingArrayValueBonusPct,
-        'serverFarmLevel': serverFarmLevel,
-        'serverFarmPrestige': serverFarmPrestige,
-        'tradeDepotLevel': tradeDepotLevel,
-        'tradeDepotPrestige': tradeDepotPrestige,
-        'repairGantryLevel': repairGantryLevel,
-        'fleet': fleet.map((ship) => ship.toJson()).toList(),
-        'fleetValue': fleetValue,
-        'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      // 3. Prepare Public Leaderboard Payload (NEW)
-      final Map<String, dynamic> leaderboardData = {
-        'companyName': companyName,
-        'cashOnHand': solars, // Matches 'solars'
-        'netWorth': solars + fleetValue + calculateBaseUpgradeInvestment(), // More accurate Net Worth (Cash + Ships + Buildings)
-        'totalContracts': totalContracts,
-        'topShipValue': topShipVal,
-        'topShipNickname': topShip?.nickname ?? "None",
-        'topShipClass': topShip?.shipClass ?? "N/A",
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      try {
-        // Write to PRIVATE user doc
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUid)
-            .set(cloudData, SetOptions(merge: true));
-
-        // Write to PUBLIC leaderboard doc
-        await FirebaseFirestore.instance
-            .collection('leaderboard')
-            .doc(_currentUid)
-            .set(leaderboardData, SetOptions(merge: true));
-
-      } catch (e) {
-        debugPrint("Error syncing cloud: $e");
+    Ship? topShip;
+    int topShipVal = 0;
+    for (var s in fleet) {
+      final val = getShipSaleValue(s);
+      if (val > topShipVal) {
+        topShipVal = val;
+        topShip = s;
       }
     }
+
+    final Map<String, dynamic> leaderboardData = {
+      'companyName': companyName,
+      'cashOnHand': solars,
+      'netWorth': solars + fleetValue + calculateBaseUpgradeInvestment(),
+      'totalContracts': totalContracts,
+      'topShipValue': topShipVal,
+      'topShipNickname': topShip?.nickname ?? "None",
+      'topShipClass': topShip?.shipClass ?? "N/A",
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('leaderboard')
+          .doc(_currentUid)
+          .set(leaderboardData, SetOptions(merge: true));
+
+      _lastLeaderboardWrite = DateTime.now();
+      debugPrint("🏆 CLOUD: Leaderboard updated");
+    } catch (e) {
+      debugPrint("🏆 CLOUD: Leaderboard update failed: $e");
+    }
+  }
+
+
+
 
   final _localSaveDebouncer = Debouncer(delay: const Duration(milliseconds: 400));
 
@@ -482,6 +389,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
         // 1. Try to load the "Box" (New Format)
         final String? jsonStr = prefs.getString('mosc_save');
+        _hasLocalSave = (jsonStr != null);
+
 
         if (jsonStr != null) {
           final Map<String, dynamic> local = jsonDecode(jsonStr);
@@ -571,6 +480,71 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
+  Future<void> uploadLocalSaveToCloud() async {
+    if (_currentUid == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    // Make sure local is freshly saved first (so blob matches current state)
+    await _saveLocal(prefs);
+
+    final jsonStr = prefs.getString('mosc_save');
+    if (jsonStr == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUid)
+        .set({
+          'saveBlob': jsonStr,
+          'saveVersion': 1,
+          'saveLastActiveTime': _lastActiveTime.toIso8601String(),
+          'saveUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
+  Future<void> restoreFromCloudIfNewer({bool force = false}) async {
+    if (_currentUid == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUid)
+        .get();
+
+    final data = doc.data();
+    if (data == null) return;
+
+    final cloudBlob = data['saveBlob'] as String?;
+    if (cloudBlob == null) return;
+
+    // Compare timestamps so you don’t overwrite newer local
+    final cloudTimeStr = data['saveLastActiveTime'] as String?;
+    final cloudTime = cloudTimeStr != null ? DateTime.tryParse(cloudTimeStr) : null;
+
+    // If not forcing, only restore if cloud is newer than local
+    if (!force && cloudTime != null) {
+      if (_lastActiveTime.isAfter(cloudTime)) {
+        // Local is newer; do nothing.
+        return;
+      }
+    }
+
+    // Write cloud blob into local prefs
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('mosc_save', cloudBlob);
+
+    // Now reload local (this repopulates missions, fleet, everything)
+    await _loadData();
+
+    // Safety: if missions missing after restore, generate them
+    if (availableMissions.isEmpty) {
+      generateNewMissions();
+    }
+
+    notifyListeners();
+  }
+
+
+
   Future<void> resetProgress() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -589,16 +563,12 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _triggerUpdate() {
-    SharedPreferences.getInstance().then((prefs) {
-      _saveLocal(prefs);
-    });
-    if (_currentUid != null) {
-      _cloudSaveDebouncer.run(() => _saveData());
-    }
+    _scheduleLocalSave();
     notifyListeners();
   }
 
-  // --- GAME LOGIC ---
+
+
 
   int get maxFleetSize => hangarLevel == 1 ? 2 : hangarLevel * 2;
   int get maxStorage => (tradeDepotLevel * 500) + (tradeDepotPrestige * 100);
@@ -671,6 +641,38 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       }
     });
   }
+
+  void startLoopsIfNeeded() {
+    if (_loopsStarted) return;
+    _loopsStarted = true;
+
+    // Execute offline catchup BEFORE starting loops (same as you had)
+    _tradingService.processOfflineCatchup(
+      lastActiveTime: _lastActiveTime,
+      tradeDepotLevel: tradeDepotLevel,
+      maxStorage: maxStorage,
+      ore: ore,
+      gas: gas,
+      crystals: crystals,
+    );
+
+    // Start the main game loop
+    _startGameLoop();
+
+    // Start the Trading Hub loop (same as you had)
+    _tradingService.startTradingLoop(
+      requestCurrentState: () => {
+        'level': tradeDepotLevel,
+        'maxStorage': maxStorage,
+        'ore': ore,
+        'gas': gas,
+        'crystals': crystals,
+      },
+    );
+
+    debugPrint('🔁 LOOPS: Started');
+  }
+
 
   void debugSave() {
     debugPrint("🔘 DEBUG: Force Save Initiated");
@@ -1293,7 +1295,6 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint("COREY_LOG: Reset failed: $e");
     }
   }
-
 
     void debugSimulateOfflineTime(int minutes) {
       debugPrint("🕒 DEBUG: Simulating $minutes minutes of offline time...");

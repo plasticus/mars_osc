@@ -66,7 +66,7 @@ class LoginScreen extends StatelessWidget {
             style: const TextStyle(color: Colors.white70)),
         const SizedBox(height: 32),
         ElevatedButton(
-          onPressed: () => state.initializeUserSession(state.currentUid!),
+          onPressed: () => state.connectCloudSession(state.currentUid!),
           child: const Text("RETRY COMMAND LINK"),
         ),
         const SizedBox(height: 16),

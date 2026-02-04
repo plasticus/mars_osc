@@ -216,9 +216,16 @@ class MissionCard extends StatelessWidget {
           child: Icon(Icons.assignment_outlined, color: mainColor, size: 20),
         ),
         title: Text(mission.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
-        subtitle: Text(
-          "${mission.distanceAU.toStringAsFixed(2)} AU | $rewardStr",
-          style: TextStyle(fontSize: 11, color: isDoable ? Colors.grey : Colors.grey[700]),
+        subtitle: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            "${mission.distanceAU.toStringAsFixed(2)} AU | $rewardStr",
+            style: TextStyle(
+              fontSize: 11,
+              color: isDoable ? Colors.grey : Colors.grey[700],
+            ),
+          ),
         ),
         children: [
           Padding(

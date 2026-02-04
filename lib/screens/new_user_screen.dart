@@ -28,7 +28,7 @@ class NewUserScreen extends StatelessWidget {
                 Text(state.initError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => state.initializeUserSession(state.currentUser!.uid),
+                  onPressed: () => state.connectCloudSession(state.currentUser!.uid),
                   child: const Text("RETRY CONNECTION"),
                 ),
               ] else ...[

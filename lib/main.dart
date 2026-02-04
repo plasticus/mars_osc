@@ -51,70 +51,89 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  String? _lastUid;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // 1. Waiting for Firebase Auth
+        // 1) Waiting for Firebase Auth
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        if (snapshot.hasData) {
-          // Use read instead of watch to avoid rebuilding on every GameState change
-          final state = context.read<GameState>();
+        final state = context.watch<GameState>();
+        final user = snapshot.data;
 
-          // Trigger the session init if we haven't already
-          final uid = snapshot.data!.uid;
-
-          // Trigger session init any time we have a logged-in user but GameState
-          // isn't initialized for THIS uid yet.
-          if (state.currentUid != uid && !state.isLoading) {
-            Future.microtask(() => state.initializeUserSession(uid));
-          }
-
-          // For checking loading/error state, we need a separate consumer
-          return Consumer<GameState>(
-            builder: (context, state, child) {
-              // 2. Waiting for GameState to finish the Firestore fetch
-              if (state.isLoading) {
-                return const Scaffold(
-                  body: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 20),
-                        Text("Establishing Link...", style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              // 3. Handle Errors or New Users
-              if (state.initError != null || state.isNewUser) {
-                return const NewUserScreen();
-              }
-
-              // 4. Everything is good, go to the game
-              // This will only be created ONCE, not on every GameState update
-              return child!;
-            },
-            child: const MainNavigationScreen(),
+        // 2) Wait until local load is done before doing cloud work
+        // (Your GameState sets isLoading false after _loadData finishes now.)
+        if (state.isLoading) {
+          return const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 20),
+                  Text("Loading Local Save...", style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
           );
         }
 
-        // 5. Not logged in at all
-        return const LoginScreen();
+        // 3) Run connect/restore logic ONCE after local load is done
+        final uid = user?.uid;
+
+        if (_lastUid != uid) {
+          _lastUid = uid;
+
+          Future.microtask(() async {
+            if (!mounted) return;
+            if (uid != null) {
+              await state.connectCloudSession(uid);
+
+              if (!state.hasLocalSave) {
+                await state.restoreFromCloudIfNewer(force: true);
+              }
+            }
+
+            state.startLoopsIfNeeded();
+          });
+        }
+
+
+        // 4) Handle Errors or New Users
+        return Consumer<GameState>(
+          builder: (context, state, child) {
+            if (state.initError != null || state.isNewUser) {
+              return const NewUserScreen();
+            }
+
+            // If not logged in
+            if (user == null) {
+              return const LoginScreen();
+            }
+
+            // Everything is good
+            return child!;
+          },
+          child: const MainNavigationScreen(),
+        );
       },
     );
   }
 }
+
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
