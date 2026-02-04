@@ -7,6 +7,7 @@ import '../models/ship_model.dart';
 import '../models/mission_model.dart';
 import '../services/mission_service.dart';
 import '../services/auth_service.dart';
+import '../services/trading_hub_service.dart'; // IMPORT NEW SERVICE
 import '../models/log_entry.dart';
 import '../utils/game_formulas.dart';
 import '../utils/text_generators.dart';
@@ -17,10 +18,6 @@ import 'dart:async';
 const bool enableDebugButtons = !bool.fromEnvironment('dart.vm.product');
 
 final _cloudSaveDebouncer = Debouncer(delay: const Duration(seconds: 30));
-// This waits for 30 seconds of "silence" before syncing to the cloud.
-
-
-
 
 void _applyHullWear(Ship ship) {
   double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
@@ -28,7 +25,7 @@ void _applyHullWear(Ship ship) {
   ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
 }
 
-class GameState extends ChangeNotifier {
+class GameState extends ChangeNotifier with WidgetsBindingObserver {
   int solars = 50000;
   String companyName = "Establishing Link...";
   bool hasNamedCompany = false;
@@ -57,7 +54,7 @@ class GameState extends ChangeNotifier {
   int tradeDepotLevel = 1;
   int repairGantryLevel = 0;
   int broadcastingArrayLevel = 1;
-  int totalContracts = 0; // Tracks every contract ever finished
+  int totalContracts = 0;
 
   //Prestige
   int tradeDepotPrestige = 0;
@@ -71,12 +68,20 @@ class GameState extends ChangeNotifier {
   List<LogEntry> missionLogs = [];
 
   final MissionService _missionService = MissionService();
+  late TradingHubService _tradingService; // NEW SERVICE
+
   Timer? _gameTimer;
-  Timer? _marketTimer;
+  // Timer? _marketTimer; // REMOVED OLD TIMER
+
   bool _isInitialized = false;
   bool isBetaTiming = true;
 
-  DateTime? nextMissionRefresh; // New field for timer
+  DateTime? nextMissionRefresh;
+  DateTime _lastActiveTime = DateTime.now(); // NEW FIELD FOR OFFLINE CALC
+
+  void forceRefresh() {
+    notifyListeners();
+  }
 
   Future<void> _ensureUserDefaults(String uid) async {
     if (companyName == "Establishing Link..." || companyName == "Searching Registry...") {
@@ -85,55 +90,58 @@ class GameState extends ChangeNotifier {
     }
 
     final ref = FirebaseFirestore.instance.collection('users').doc(uid);
-
     final snap = await ref.get();
     final data = snap.data() ?? <String, dynamic>{};
-
-    // Only add fields that are missing
     final Map<String, dynamic> missing = {};
 
     void ensure(String key, dynamic value) {
       if (!data.containsKey(key)) missing[key] = value;
     }
 
-   // Only save to cloud if we have a real name, not a loading message
     if (companyName != "Establishing Link..." && companyName != "Searching Registry...") {
       ensure('companyName', companyName);
     }
     ensure('hasNamedCompany', hasNamedCompany);
-
     ensure('solars', solars);
     ensure('ore', ore);
     ensure('gas', gas);
     ensure('crystals', crystals);
-
     ensure('hangarLevel', hangarLevel);
     ensure('relayLevel', relayLevel);
     ensure('serverFarmLevel', serverFarmLevel);
     ensure('tradeDepotLevel', tradeDepotLevel);
     ensure('repairGantryLevel', repairGantryLevel);
     ensure('broadcastingArrayLevel', broadcastingArrayLevel);
-
     ensure('tradeDepotPrestige', tradeDepotPrestige);
     ensure('broadcastingArrayPrestige', broadcastingArrayPrestige);
     ensure('serverFarmPrestige', serverFarmPrestige);
-
-    // Ensure timer
     ensure('nextMissionRefresh', (nextMissionRefresh ?? DateTime.now()).toIso8601String());
+    ensure('lastActiveTime', _lastActiveTime.toIso8601String()); // ENSURE CLOUD HAS TIME
 
     if (missing.isNotEmpty) {
       if (snap.exists) {
         await ref.update(missing);
       } else {
-        await ref.set(missing); // creates doc for brand new user
+        await ref.set(missing);
       }
     }
   }
 
-
-
   GameState() {
-    // Load local data first (fast startup)
+    WidgetsBinding.instance.addObserver(this);
+    // 1. Initialize Trading Service with Callback
+    _tradingService = TradingHubService(
+      onTradeExecuted: (revenue, dOre, dGas, dCrystals, logEntry) {
+        solars += revenue;
+        ore += dOre;
+        gas += dGas;
+        crystals += dCrystals;
+        if (logEntry != null) _addLog(logEntry);
+        _triggerUpdate();
+      }
+    );
+
+    // 2. Load Local Data
     _loadData().then((_) async {
       _isInitialized = true;
 
@@ -141,10 +149,36 @@ class GameState extends ChangeNotifier {
         _setupStarterShip();
       }
 
-      _startGameLoop();
-      _startMarketLoop();
+      if (availableMissions.isEmpty) {
+        generateNewMissions();
+      }
 
-      // If already signed in, initialize cloud session; otherwise show login UI
+      // 3. EXECUTE OFFLINE CATCHUP *BEFORE* STARTING GAME LOOP
+      // This ensures storage is cleared before ships land.
+      _tradingService.processOfflineCatchup(
+        lastActiveTime: _lastActiveTime,
+        tradeDepotLevel: tradeDepotLevel,
+        maxStorage: maxStorage,
+        ore: ore,
+        gas: gas,
+        crystals: crystals
+      );
+
+      // 4. Start Loops
+      _startGameLoop();
+
+      // Start the new Trading Hub loop
+      _tradingService.startTradingLoop(
+        requestCurrentState: () => {
+          'level': tradeDepotLevel,
+          'maxStorage': maxStorage,
+          'ore': ore,
+          'gas': gas,
+          'crystals': crystals,
+        }
+      );
+
+      // 5. Auth Check
       final u = FirebaseAuth.instance.currentUser;
       if (u != null) {
         await initializeUserSession(u.uid);
@@ -156,7 +190,39 @@ class GameState extends ChangeNotifier {
     });
   }
 
+  @override
+    void didChangeAppLifecycleState(AppLifecycleState state) {
+      if (state == AppLifecycleState.paused) {
+        // User left the app: Save now to lock in the "Last Active" time
+        debugPrint("⏸️ App Paused: Saving State...");
+        _triggerUpdate();
+      }
 
+      if (state == AppLifecycleState.resumed) {
+        // User came back: Run the Catch-up logic!
+        debugPrint("▶️ App Resumed: Checking Offline Sales...");
+        _loadData().then((_) {
+           // Reload data first to ensure we have the latest timestamp, then process
+          _tradingService.processOfflineCatchup(
+            lastActiveTime: _lastActiveTime,
+            tradeDepotLevel: tradeDepotLevel,
+            maxStorage: maxStorage,
+            ore: ore,
+            gas: gas,
+            crystals: crystals,
+          );
+          notifyListeners();
+        });
+      }
+    }
+
+    @override
+    void dispose() {
+      WidgetsBinding.instance.removeObserver(this); // <--- CLEANUP
+      _gameTimer?.cancel();
+      _tradingService.stop();
+      super.dispose();
+    }
 
   void _setupStarterShip() {
     fleet = [
@@ -179,7 +245,6 @@ class GameState extends ChangeNotifier {
     ];
   }
 
-  // --- LOGGING HELPER (Caps at 50) ---
   void _addLog(LogEntry entry) {
     missionLogs.insert(0, entry);
     if (missionLogs.length > 50) {
@@ -187,10 +252,7 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  // --- AUTHENTICATION & CLOUD SESSION ---
-
   Future<void> initializeUserSession(String uid) async {
-    // Prevent re-entry / duplicate loads
     if (_currentUid == uid && _isInitialized) return;
 
     _currentUid = uid;
@@ -203,19 +265,14 @@ class GameState extends ChangeNotifier {
       final snap = await docRef.get();
 
       if (snap.exists && snap.data() != null) {
-        // Existing user: load cloud data
         final data = snap.data()!;
         _applyCloudData(data);
-
-        // Make sure any *new* fields get added without overwriting existing ones
         await _ensureUserDefaults(uid);
       } else {
-        // Brand new user: create defaults once
         await _ensureUserDefaults(uid);
         isNewUser = true;
       }
 
-      // Save local snapshot so "resume" is instant (and survives process death)
       final prefs = await SharedPreferences.getInstance();
       await _saveLocal(prefs);
 
@@ -231,52 +288,46 @@ class GameState extends ChangeNotifier {
   }
 
   void _applyCloudData(Map<String, dynamic> data) {
-    // Simple fields
     companyName = (data['companyName'] as String?) ?? companyName;
     solars = (data['solars'] as int?) ?? solars;
     crystals = (data['crystals'] as int?) ?? crystals;
+    ore = (data['ore'] as int?) ?? ore;
+    gas = (data['gas'] as int?) ?? gas;
 
     hangarLevel = (data['hangarLevel'] as int?) ?? hangarLevel;
     relayLevel = (data['relayLevel'] as int?) ?? relayLevel;
-
     tradeDepotLevel = (data['tradeDepotLevel'] as int?) ?? tradeDepotLevel;
     tradeDepotPrestige = (data['tradeDepotPrestige'] as int?) ?? tradeDepotPrestige;
-
     broadcastingArrayLevel = (data['broadcastingArrayLevel'] as int?) ?? broadcastingArrayLevel;
     broadcastingArrayPrestige = (data['broadcastingArrayPrestige'] as int?) ?? broadcastingArrayPrestige;
-
     serverFarmLevel = (data['serverFarmLevel'] as int?) ?? serverFarmLevel;
     serverFarmPrestige = (data['serverFarmPrestige'] as int?) ?? serverFarmPrestige;
-
     repairGantryLevel = (data['repairGantryLevel'] as int?) ?? repairGantryLevel;
 
-    // Dates / timers (stored as ISO strings typically)
     final nextRefreshStr = data['nextMissionRefresh'] as String?;
     if (nextRefreshStr != null) {
       nextMissionRefresh = DateTime.tryParse(nextRefreshStr) ?? nextMissionRefresh;
     }
 
-    // Fleet
+    // Cloud overrides local time if valid
+    final lastActiveStr = data['lastActiveTime'] as String?;
+    if (lastActiveStr != null) {
+       // We only use this if we didn't just load a fresher one from local,
+       // but generally local is king for "last time I closed the app".
+    }
+
     final fleetList = data['fleet'];
     if (fleetList is List) {
       try {
         fleet = (fleetList as List)
             .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
             .toList();
-
-        // If your Firestore fleet entries are `Map<dynamic,dynamic>`:
-        // .map((m) => Ship.fromMap(Map<String, dynamic>.from(m)))
-      } catch (_) {
-        // If fleet parsing fails, don’t wipe the player’s current fleet
-      }
+      } catch (_) {}
     }
-
-    // Mission logs, contracts, etc — do the same pattern here if you store them
   }
 
   Future<void> signInWithGoogle() async {
     final userCredential = await AuthService.signInWithGoogle();
-
     if (userCredential?.user != null) {
       await initializeUserSession(userCredential!.user!.uid);
     }
@@ -284,64 +335,94 @@ class GameState extends ChangeNotifier {
 
   Future<void> signOut() async {
     await AuthService.signOut();
-
     _currentUid = null;
     _isInitialized = false;
     notifyListeners();
   }
 
-
-  // --- PERSISTENCE LOGIC (Dual Support) ---
-
   Future<void> _saveData() async {
-    // If we haven't loaded at least once, don't write anything yet.
-    if (!_isInitialized) return;
+      if (!_isInitialized) return;
 
-    final prefs = await SharedPreferences.getInstance();
+      // 1. Local Save (Keep this)
+      final prefs = await SharedPreferences.getInstance();
+      await _saveLocal(prefs);
 
-    // ✅ Persist LOCAL first so you don't "reset" on restart/background-kill.
-    await _saveLocal(prefs);
+      if (_currentUid == null) return;
 
-    // If not signed in yet, we can't sync to cloud (local is still saved).
-    if (_currentUid == null) return;
+      // 2. Prepare User Data (Keep this)
+      final int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
 
-    final int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
+      // Calculate Top Ship for Leaderboard
+      Ship? topShip;
+      int topShipVal = 0;
+      if (fleet.isNotEmpty) {
+        // Find the single most valuable ship
+        for (var s in fleet) {
+          int val = getShipSaleValue(s);
+          if (val > topShipVal) {
+            topShipVal = val;
+            topShip = s;
+          }
+        }
+      }
 
-    final Map<String, dynamic> cloudData = {
-      'companyName': companyName,
-      'solars': solars,
-      'crystals': crystals,
-      'ore': ore,
-      'maxStorage': maxStorage,
-      'contractsPerCategory': contractsPerCategory,
-      'bonusContractsPerCategory': bonusContractsPerCategory,
-      'nextMissionRefresh': nextMissionRefresh?.toIso8601String() ?? DateTime.now().toIso8601String(),
-      'hangarLevel': hangarLevel,
-      'relayLevel': relayLevel,
-      'broadcastingArrayLevel': broadcastingArrayLevel,
-      'broadcastingArrayPrestige': broadcastingArrayPrestige,
-      'broadcastingArrayValueBonusPct': broadcastingArrayValueBonusPct,
-      'serverFarmLevel': serverFarmLevel,
-      'serverFarmPrestige': serverFarmPrestige,
-      'tradeDepotLevel': tradeDepotLevel,
-      'tradeDepotPrestige': tradeDepotPrestige,
-      'repairGantryLevel': repairGantryLevel,
-      'fleet': fleet.map((ship) => ship.toJson()).toList(),
-      'fleetValue': fleetValue,
-      'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
+      // Main User Data Cloud Payload
+      final Map<String, dynamic> cloudData = {
+        'companyName': companyName,
+        'solars': solars,
+        'crystals': crystals,
+        'ore': ore,
+        'gas': gas,
+        'maxStorage': maxStorage,
+        'contractsPerCategory': contractsPerCategory,
+        'bonusContractsPerCategory': bonusContractsPerCategory,
+        'nextMissionRefresh': nextMissionRefresh?.toIso8601String() ?? DateTime.now().toIso8601String(),
+        'lastActiveTime': _lastActiveTime.toIso8601String(),
+        'hangarLevel': hangarLevel,
+        'relayLevel': relayLevel,
+        'broadcastingArrayLevel': broadcastingArrayLevel,
+        'broadcastingArrayPrestige': broadcastingArrayPrestige,
+        'broadcastingArrayValueBonusPct': broadcastingArrayValueBonusPct,
+        'serverFarmLevel': serverFarmLevel,
+        'serverFarmPrestige': serverFarmPrestige,
+        'tradeDepotLevel': tradeDepotLevel,
+        'tradeDepotPrestige': tradeDepotPrestige,
+        'repairGantryLevel': repairGantryLevel,
+        'fleet': fleet.map((ship) => ship.toJson()).toList(),
+        'fleetValue': fleetValue,
+        'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUid)
-          .set(cloudData, SetOptions(merge: true));
-    } catch (_) {
-      // Cloud sync failure should never wipe local progress.
+      // 3. Prepare Public Leaderboard Payload (NEW)
+      final Map<String, dynamic> leaderboardData = {
+        'companyName': companyName,
+        'cashOnHand': solars, // Matches 'solars'
+        'netWorth': solars + fleetValue + calculateBaseUpgradeInvestment(), // More accurate Net Worth (Cash + Ships + Buildings)
+        'totalContracts': totalContracts,
+        'topShipValue': topShipVal,
+        'topShipNickname': topShip?.nickname ?? "None",
+        'topShipClass': topShip?.shipClass ?? "N/A",
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      try {
+        // Write to PRIVATE user doc
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_currentUid)
+            .set(cloudData, SetOptions(merge: true));
+
+        // Write to PUBLIC leaderboard doc
+        await FirebaseFirestore.instance
+            .collection('leaderboard')
+            .doc(_currentUid)
+            .set(leaderboardData, SetOptions(merge: true));
+
+      } catch (e) {
+        debugPrint("Error syncing cloud: $e");
+      }
     }
-  }
-
 
   final _localSaveDebouncer = Debouncer(delay: const Duration(milliseconds: 400));
 
@@ -353,85 +434,142 @@ class GameState extends ChangeNotifier {
   }
 
   Future<void> _saveLocal(SharedPreferences prefs) async {
-    final local = <String, dynamic>{
-      'companyName': companyName,
-      'solars': solars,
-      'crystals': crystals,
-      'hangarLevel': hangarLevel,
-      'relayLevel': relayLevel,
-      'tradeDepotLevel': tradeDepotLevel,
-      'tradeDepotPrestige': tradeDepotPrestige,
-      'broadcastingArrayLevel': broadcastingArrayLevel,
-      'broadcastingArrayPrestige': broadcastingArrayPrestige,
-      'serverFarmLevel': serverFarmLevel,
-      'serverFarmPrestige': serverFarmPrestige,
-      'repairGantryLevel': repairGantryLevel,
-      'nextMissionRefresh': (nextMissionRefresh ?? DateTime.now()).toIso8601String(),
+      try {
+        _lastActiveTime = DateTime.now();
 
-      // Fleet stored as JSON-able maps
-      'fleet': fleet.map((s) => s.toJson()).toList(),
-    };
+        // 1. Construct the map
+        final local = <String, dynamic>{
+          'companyName': companyName,
+          'solars': solars,
+          'crystals': crystals,
+          'ore': ore,
+          'gas': gas,
+          'hangarLevel': hangarLevel,
+          'relayLevel': relayLevel, // This should be 4!
+          'tradeDepotLevel': tradeDepotLevel,
+          'tradeDepotPrestige': tradeDepotPrestige,
+          'broadcastingArrayLevel': broadcastingArrayLevel,
+          'broadcastingArrayPrestige': broadcastingArrayPrestige,
+          'serverFarmLevel': serverFarmLevel,
+          'serverFarmPrestige': serverFarmPrestige,
+          'repairGantryLevel': repairGantryLevel,
+          'nextMissionRefresh': (nextMissionRefresh ?? DateTime.now()).toIso8601String(),
+          'lastActiveTime': _lastActiveTime.toIso8601String(),
+          'fleet': fleet.map((s) => s.toJson()).toList(),
+          'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
+          'availableMissions': availableMissions.map((m) => m.toJson()).toList(),
+        };
 
-    await prefs.setString('mosc_save', jsonEncode(local));
-  }
+        // 2. Attempt to Encode (This is likely where it crashes)
+        final String encodedJson = jsonEncode(local);
+
+        // 3. Write to disk
+        await prefs.setString('mosc_save', encodedJson);
+
+        debugPrint("✅ SAVE SUCCESS: Wrote Relay Level $relayLevel and ${availableMissions.length} missions.");
+
+      } catch (e) {
+        // THIS is the error we need to see
+        debugPrint("🛑 SAVE FAILED: $e");
+        //debugLoadError = "SAVE FAILED: $e"; // Show it on the UI if you added that feature
+      }
+    }
 
   Future<void> _loadData() async {
-    // Local load so you can resume instantly even before Firebase Auth finishes.
-    try {
-      final prefs = await SharedPreferences.getInstance();
+      debugPrint("📂 LOAD: Starting safe load sequence...");
+      try {
+        final prefs = await SharedPreferences.getInstance();
 
-      companyName = prefs.getString('companyName') ?? companyName;
+        // 1. Try to load the "Box" (New Format)
+        final String? jsonStr = prefs.getString('mosc_save');
 
-      solars = prefs.getInt('solars') ?? solars;
-      ore = prefs.getInt('ore') ?? ore;
-      crystals = prefs.getInt('crystals') ?? crystals;
-      hangarLevel = prefs.getInt('hangarLevel') ?? hangarLevel;
-      relayLevel = prefs.getInt('relayLevel') ?? relayLevel;
+        if (jsonStr != null) {
+          final Map<String, dynamic> local = jsonDecode(jsonStr);
 
-      broadcastingArrayLevel = prefs.getInt('broadcastingArrayLevel') ?? broadcastingArrayLevel;
-      broadcastingArrayPrestige =
-          prefs.getInt('broadcastingArrayPrestige') ?? broadcastingArrayPrestige;
+          // --- A. LOAD TIMESTAMPS (Safely) ---
+          try {
+            if (local['lastActiveTime'] != null) {
+              _lastActiveTime = DateTime.tryParse(local['lastActiveTime']) ?? DateTime.now();
+            }
+            if (local['nextMissionRefresh'] != null) {
+              nextMissionRefresh = DateTime.tryParse(local['nextMissionRefresh']);
+            }
+          } catch (e) {
+            debugPrint("⚠️ LOAD ERROR (Timestamps): $e");
+          }
 
-      serverFarmLevel = prefs.getInt('serverFarmLevel') ?? serverFarmLevel;
-      serverFarmPrestige = prefs.getInt('serverFarmPrestige') ?? serverFarmPrestige;
+          // --- B. LOAD STATS (Safely) ---
+          try {
+            companyName = local['companyName'] ?? companyName;
+            solars = (local['solars'] as num?)?.toInt() ?? solars;
+            ore = (local['ore'] as num?)?.toInt() ?? ore;
+            gas = (local['gas'] as num?)?.toInt() ?? gas;
+            crystals = (local['crystals'] as num?)?.toInt() ?? crystals;
 
-      tradeDepotLevel = prefs.getInt('tradeDepotLevel') ?? tradeDepotLevel;
-      tradeDepotPrestige = prefs.getInt('tradeDepotPrestige') ?? tradeDepotPrestige;
+            hangarLevel = (local['hangarLevel'] as num?)?.toInt() ?? hangarLevel;
+            relayLevel = (local['relayLevel'] as num?)?.toInt() ?? relayLevel;
+            tradeDepotLevel = (local['tradeDepotLevel'] as num?)?.toInt() ?? tradeDepotLevel;
+            tradeDepotPrestige = (local['tradeDepotPrestige'] as num?)?.toInt() ?? tradeDepotPrestige;
+            broadcastingArrayLevel = (local['broadcastingArrayLevel'] as num?)?.toInt() ?? broadcastingArrayLevel;
+            broadcastingArrayPrestige = (local['broadcastingArrayPrestige'] as num?)?.toInt() ?? broadcastingArrayPrestige;
+            serverFarmLevel = (local['serverFarmLevel'] as num?)?.toInt() ?? serverFarmLevel;
+            serverFarmPrestige = (local['serverFarmPrestige'] as num?)?.toInt() ?? serverFarmPrestige;
+            repairGantryLevel = (local['repairGantryLevel'] as num?)?.toInt() ?? repairGantryLevel;
+          } catch (e) {
+            debugPrint("⚠️ LOAD ERROR (Stats): $e");
+          }
 
-      repairGantryLevel = prefs.getInt('repairGantryLevel') ?? repairGantryLevel;
+          // --- C. LOAD LISTS (Safely) ---
 
-      final refreshString = prefs.getString('nextMissionRefresh');
-      if (refreshString != null) {
-        nextMissionRefresh = DateTime.tryParse(refreshString);
-      }
+          // Fleet
+          try {
+            if (local['fleet'] != null) {
+              fleet = (local['fleet'] as List)
+                  .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
+                  .toList();
+            }
+          } catch (e) {
+            debugPrint("⚠️ LOAD ERROR (Fleet): $e");
+          }
 
-      // Fleet
-      final fleetString = prefs.getString('fleet');
-      if (fleetString != null && fleetString.isNotEmpty) {
-        final decoded = jsonDecode(fleetString);
-        if (decoded is List) {
-          fleet = decoded
-              .whereType<Map>()
-              .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
-              .toList();
+          // Logs
+          try {
+            if (local['missionLogs'] != null) {
+              missionLogs = (local['missionLogs'] as List)
+                  .map((m) => LogEntry.fromJson(Map<String, dynamic>.from(m)))
+                  .toList();
+            }
+          } catch (e) {
+            debugPrint("⚠️ LOAD ERROR (Logs): $e");
+          }
+
+          // Missions (The likely culprit)
+          try {
+            if (local['availableMissions'] != null) {
+              availableMissions = (local['availableMissions'] as List)
+                  .map((m) => Mission.fromJson(Map<String, dynamic>.from(m)))
+                  .toList();
+              debugPrint("✅ LOAD: Restored ${availableMissions.length} missions.");
+            }
+          } catch (e) {
+            debugPrint("⚠️ LOAD ERROR (Missions): $e");
+            // If missions fail to load, we clear the list so the Safety Check generates new ones
+            availableMissions = [];
+          }
+
+        } else {
+          // --- PATH B: LEGACY FALLBACK ---
+          debugPrint("⚠️ LOAD: No box found, trying legacy keys...");
+          // (Keep your existing legacy loading logic here if you want,
+          // or just let it start fresh since you reinstalled)
+          relayLevel = prefs.getInt('relayLevel') ?? 1;
+          // ... etc ...
         }
-      }
 
-      // Mission logs
-      final logsString = prefs.getString('missionLogs');
-      if (logsString != null && logsString.isNotEmpty) {
-        final decoded = jsonDecode(logsString);
-        if (decoded is List) {
-          missionLogs = decoded
-              .whereType<Map>()
-              .map((m) => LogEntry.fromJson(Map<String, dynamic>.from(m)))
-              .toList();
-        }
+      } catch (e) {
+        debugPrint("🛑 CRITICAL LOAD FAILURE: $e");
       }
-    } catch (_) {
-      // If local load fails for any reason, we fall back to defaults.
     }
-  }
 
   Future<void> resetProgress() async {
     final prefs = await SharedPreferences.getInstance();
@@ -451,16 +589,12 @@ class GameState extends ChangeNotifier {
   }
 
   void _triggerUpdate() {
-    // 1. Save locally. We fetch the instance right here.
     SharedPreferences.getInstance().then((prefs) {
       _saveLocal(prefs);
     });
-
-    // 2. Schedule cloud sync with the debouncer
     if (_currentUid != null) {
       _cloudSaveDebouncer.run(() => _saveData());
     }
-
     notifyListeners();
   }
 
@@ -484,17 +618,15 @@ class GameState extends ChangeNotifier {
     return 0.0;
   }
 
-  // Trade Depot: UI-facing bonus summaries (based on GameFormulas logic)
-  int get tradeDepotAutoSellPriceBonusPct => tradeDepotLevel * 5; // 0.05 per level
-  int get tradeDepotAutoSellVolumeBonusPct => tradeDepotLevel * 1; // 0.01 per level (base)
+  // UI-facing bonus summaries
+  int get tradeDepotAutoSellPriceBonusPct => tradeDepotLevel * 5;
+  int get tradeDepotAutoSellVolumeBonusPct => tradeDepotLevel * 1;
   int get tradeDepotAutoSellQuotaUnitsPerTickBase {
     final basePercent = tradeDepotLevel * 0.01;
     return (maxStorage * basePercent).round();
   }
 
   int get contractsPerCategory {
-    // Based on your upgrade text: +2 per level, max 10/cat at level 5
-    // L1=2, L2=4, L3=6, L4=8, L5=10
     final perCat = 2 + ((broadcastingArrayLevel - 1) * 2);
     return perCat.clamp(2, 10);
   }
@@ -514,8 +646,7 @@ class GameState extends ChangeNotifier {
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final now = DateTime.now();
       bool changesMade = false;
-      
-      // Auto-refresh missions
+
         if (nextMissionRefresh == null) {
           generateNewMissions();
         } else if (now.isAfter(nextMissionRefresh!)) {
@@ -541,45 +672,9 @@ class GameState extends ChangeNotifier {
     });
   }
 
-  void _startMarketLoop() {
-    _marketTimer?.cancel();
-    _marketTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      if (ore > 0 || gas > 0 || crystals > 0) {
-        _performAutoSell();
-      }
-    });
-  }
-
-  void _performAutoSell() {
-    Map<String, int> currentPrices = {
-      'Ore': getResourcePrice('Ore'),
-      'Gas': getResourcePrice('Gas'),
-      'Crystals': getResourcePrice('Crystals'),
-    };
-
-    final result = GameFormulas.calculateOnlineAutoSale(
-      ore: ore, gas: gas, crystals: crystals,
-      tradeDepotLevel: tradeDepotLevel,
-      maxStorage: maxStorage,
-      marketPrices: currentPrices,
-    );
-
-    if (result['revenue']! > 0) {
-      ore -= result['soldOre']!;
-      gas -= result['soldGas']!;
-      crystals -= result['soldCrystals']!;
-      solars += result['revenue']!;
-
-      _addLog(LogEntry(
-        timestamp: DateTime.now(),
-        title: "AI Trade Update",
-        details: "Depot AI liquidated surplus: ${result['soldOre']} Ore, ${result['soldGas']} Gas.",
-        solarChange: result['revenue'],
-        isPositive: true,
-      ));
-
-      _triggerUpdate();
-    }
+  void debugSave() {
+    debugPrint("🔘 DEBUG: Force Save Initiated");
+    _triggerUpdate(); // This triggers _saveLocal immediately
   }
 
   void manualSellAll() {
@@ -612,26 +707,20 @@ class GameState extends ChangeNotifier {
         details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} maintenance finished. Hull at 100%.",
       ));
     } else if (ship.currentTask == 'Upgrading') {
-      // Check if this specific upgrade pushed the ship to Elite status
       if (ship.isMaxed) {
-        // 1. LEGACY DESIGNATION: Rename if it still has a default name
         if (!ship.hasBeenRenamed) {
           ship.nickname = GameFormulas.generateLegacyName();
-          ship.hasBeenRenamed = true; // Mark as renamed so it doesn't happen twice
+          ship.hasBeenRenamed = true;
         }
-
-        // 2. LOCK THE IDENTITY: Prevent future manual renames
         ship.renameLocked = true;
 
         _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "ELITE TRANSFORMATION",
-          details: "${ship.nickname} has achieved Elite Status. "
-              "Attributes Gained: Vanguard Honorarium, Priority Docking, Bleeding Edge Tech, and Legacy Designation",
+          details: "${ship.nickname} has achieved Elite Status. Attributes Gained: Vanguard Honorarium, Priority Docking, Bleeding Edge Tech, and Legacy Designation",
           isPositive: true,
         ));
       } else {
-        // Standard upgrade log for non-elite ships
         _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "Upgrade Installed",
@@ -662,24 +751,28 @@ class GameState extends ChangeNotifier {
       ship.missionStartTime = now;
       ship.missionEndTime = now.add(missionDuration);
 
-      // CRITICAL FIX: Explicitly capture every reward field from the Mission object
       ship.currentMissionName = mission.title;
       ship.pendingReward = mission.rewardSolars;
-      ship.pendingResource = mission.rewardResource; // Ensure this isn't null
+      ship.pendingResource = mission.rewardResource;
       ship.pendingResourceAmount = mission.rewardResourceAmount;
 
       availableMissions.removeWhere((m) => m.id == mission.id);
 
-      // Restore local runs if applicable
+      //repeatable contracts here
       if (mission.title.contains("Local Scrap Run")) {
         availableMissions.add(_missionService.getLocalScrapRun());
       } else if (mission.title.contains("Local Courier Run")) {
         availableMissions.add(_missionService.getLocalCourierRun());
+      } else if (mission.title.contains("Belt Skimming")) {
+        availableMissions.add(_missionService.getLocalMiningRun());
+      } else if (mission.title.contains("Vent Siphoning")) {
+        availableMissions.add(_missionService.getLocalGasRun());
+      } else if (mission.title.contains("Belt Anomaly Sweep")) {
+        availableMissions.add(_missionService.getLocalRiftRun());
       }
-
       _addLog(LogEntry(
         timestamp: now,
-        title: "Mission Launched",
+        title: "Contract Launched",
         details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}.",
         isPositive: true,
       ));
@@ -691,10 +784,9 @@ class GameState extends ChangeNotifier {
   void _processMissionCompletion(Ship ship) {
     totalContracts++;
 
-    // 1. Calculate final results via GameFormulas
     final results = GameFormulas.calculateFullMissionResults(
       pendingReward: ship.pendingReward,
-      pendingResource: ship.pendingResource, // Use the String? stored in ship
+      pendingResource: ship.pendingResource,
       pendingResourceAmount: ship.pendingResourceAmount,
       aiLevel: ship.aiLevel,
       isElite: ship.isMaxed,
@@ -704,10 +796,8 @@ class GameState extends ChangeNotifier {
       maxStorage: maxStorage,
     );
 
-    // 2. Apply Solars
     solars += results.totalSolars;
 
-    // 3. Apply Physical Resources to State
     if (results.resourceAmount > 0) {
       switch (results.resourceType) {
         case 'Ore':
@@ -722,12 +812,10 @@ class GameState extends ChangeNotifier {
       }
     }
 
-    // 4. Build detailed Log String
     String earnings = "⁂${results.baseReward}";
-    if (results.brandReachBonus > 0) earnings += " + ⁂${results.brandReachBonus} (Reach)";
-    if (results.vanguardHonorarium > 0) earnings += " + ⁂${results.vanguardHonorarium} (Elite)";
+    if (results.brandReachBonus > 0) earnings += " + ⁂${results.brandReachBonus} (Brand Reach)";
+    if (results.vanguardHonorarium > 0) earnings += " + ⁂${results.vanguardHonorarium} (Vanguard Honorarium)";
 
-    // Explicitly check if resources were added or sold as overflow
     if (results.resourceAmount > 0) {
       earnings += " + ${results.resourceAmount}m³ ${results.resourceType}";
     }
@@ -740,12 +828,11 @@ class GameState extends ChangeNotifier {
 
     _addLog(LogEntry(
       timestamp: DateTime.now(),
-      title: "Mission Return: ${ship.nickname}",
+      title: "Contract Completed: ${ship.nickname}",
       details: "Earnings: $earnings",
       isPositive: true,
     ));
 
-    // 5. Cleanup ship memory
     ship.clearMissionData();
     _triggerUpdate();
   }
@@ -777,19 +864,13 @@ class GameState extends ChangeNotifier {
     }
   }
 
-
-
-
-
-
-  // --- SINGLE SHIP REPAIR (used by DryDock screen) ---
+  // --- SINGLE SHIP REPAIR ---
   void repairShip(String shipId) {
     final idx = fleet.indexWhere((s) => s.id == shipId);
     if (idx == -1) return;
 
     final s = fleet[idx];
 
-    // Don’t repair if already busy or on mission
     if (s.busyUntil != null || s.missionEndTime != null) return;
     if (s.condition >= 1.0) return;
 
@@ -811,7 +892,6 @@ class GameState extends ChangeNotifier {
 
     _triggerUpdate();
   }
-
 
   void repairAllShips() {
     int total = 0;
@@ -850,16 +930,14 @@ class GameState extends ChangeNotifier {
       else if (stat == 'shield') s.shieldLevel++;
       else if (stat == 'ai') s.aiLevel++;
 
-      // Check if this was the final upgrade
       bool becomingElite = s.isMaxed && !s.renameLocked;
 
       if (becomingElite) {
-        // Apply the Legacy name immediately if needed
         if (!s.hasBeenRenamed) {
           s.nickname = GameFormulas.generateLegacyName();
           s.hasBeenRenamed = true;
         }
-        s.renameLocked = true; // Lock it in
+        s.renameLocked = true;
       }
 
       s.busyUntil = DateTime.now().add(GameFormulas.calculateUpgradeDuration(
@@ -870,7 +948,7 @@ class GameState extends ChangeNotifier {
       s.currentTask = 'Upgrading';
 
       _triggerUpdate();
-      return becomingElite; // Tell the UI to show the popup
+      return becomingElite;
     }
     return false;
   }
@@ -880,7 +958,7 @@ class GameState extends ChangeNotifier {
   void upgradeBase(String type, int cost) {
     if (solars >= cost) {
       solars -= cost;
-      int newLevel = 0; // Track the new level to log it clearly
+      int newLevel = 0;
 
       if (type == 'Hangar') {
         hangarLevel++;
@@ -902,7 +980,6 @@ class GameState extends ChangeNotifier {
         newLevel = broadcastingArrayLevel;
       }
 
-      // Updated Log: Only shows the facility upgraded and its specific new level
       _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Base Upgraded",
@@ -941,7 +1018,7 @@ class GameState extends ChangeNotifier {
       isPositive: false,
     ));
 
-    _triggerUpdate(); // this saves + notifyListeners
+    _triggerUpdate();
   }
 
   int getBroadcastingArrayPrestigeCost() {
@@ -978,7 +1055,7 @@ class GameState extends ChangeNotifier {
   }
 
   void upgradeServerFarmPrestige() {
-    const int maxLevel = 3; // your server farm max
+    const int maxLevel = 3;
     if (serverFarmLevel < maxLevel) return;
 
     final cost = getServerFarmPrestigeCost();
@@ -1006,8 +1083,6 @@ class GameState extends ChangeNotifier {
       isElite: s.isMaxed,
     );
   }
-
-
 
   void sellShip(String id) {
     final idx = fleet.indexWhere((s) => s.id == id);
@@ -1068,7 +1143,6 @@ class GameState extends ChangeNotifier {
         break;
     }
 
-    // Only add if this specific local run isn't already available
     if (newMission != null && !availableMissions.any((m) => m.title == targetTitle)) {
       availableMissions.add(newMission);
     }
@@ -1079,7 +1153,6 @@ class GameState extends ChangeNotifier {
     if (idx != -1 && name.isNotEmpty) {
       final s = fleet[idx];
 
-      // NEW: Block renaming if the ship has achieved Legacy Designation
       if (s.renameLocked) {
         debugPrint("COREY_LOG: Rename blocked. ${s.nickname} is a Legacy vessel.");
         return;
@@ -1102,8 +1175,6 @@ class GameState extends ChangeNotifier {
     _triggerUpdate();
   }
 
-
-  /// Calculates the sum of all repair costs for ships that are damaged and not busy.
   int getTotalRepairCost() {
     int total = 0;
     for (var s in fleet) {
@@ -1117,7 +1188,6 @@ class GameState extends ChangeNotifier {
   void updateMissions(List<Mission> newMissions) {
     availableMissions = newMissions;
 
-    // 1. Mule/Sprinter defaults
     if (!availableMissions.any((m) => m.title.contains("Local Scrap Run"))) {
       availableMissions.add(_missionService.getLocalScrapRun());
     }
@@ -1125,7 +1195,6 @@ class GameState extends ChangeNotifier {
       availableMissions.add(_missionService.getLocalCourierRun());
     }
 
-    // 2. Specialized Class Safety (Corrected Method Names)
     if (fleet.any((s) => s.shipClass == 'Miner') &&
         !availableMissions.any((m) => m.requiredClass == 'Miner')) {
       availableMissions.add(_missionService.getLocalMiningRun());
@@ -1144,13 +1213,11 @@ class GameState extends ChangeNotifier {
     _triggerUpdate();
   }
 
-  /// Refreshes the mission board using the mission service. Should update every 2 hours, via clock
   void generateNewMissions() {
     updateMissions(_missionService.generateMissions(relayLevel, broadcastingArrayLevel, fleet));
     final now = DateTime.now();
     int currentHour = now.hour;
     int nextHour = (currentHour % 2 == 0) ? currentHour + 2 : currentHour + 1;
-    // 3. Handle midnight wrap-around
     if (nextHour >= 24) {
       final tomorrow = now.add(const Duration(days: 1));
       nextMissionRefresh = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0);
@@ -1160,35 +1227,26 @@ class GameState extends ChangeNotifier {
     _triggerUpdate();
   }
 
-  /// Calculates total solars spent on upgrading base facilities.
   int calculateBaseUpgradeInvestment() {
     int total = 0;
-
-    // We sum the cost for every level starting from 1 up to the current level
-    // Note: Most facilities start at Level 1, some at Level 0.
     total += _sumBaseCategoryCost('Hangar', hangarLevel, 1);
     total += _sumBaseCategoryCost('Relay', relayLevel, 1);
     total += _sumBaseCategoryCost('Server', serverFarmLevel, 0);
     total += _sumBaseCategoryCost('Depot', tradeDepotLevel, 1);
     total += _sumBaseCategoryCost('Gantry', repairGantryLevel, 0);
     total += _sumBaseCategoryCost('Broadcasting', broadcastingArrayLevel, 1);
-
     return total;
   }
 
-  /// Helper to simulate the costs paid for each level jump.
   int _sumBaseCategoryCost(String type, int currentLevel, int startLevel) {
     int categoryTotal = 0;
-    // We loop from the starting level to the current level
     for (int i = startLevel; i < currentLevel; i++) {
       categoryTotal += getBaseUpgradeCost(type, i);
     }
     return categoryTotal;
   }
 
-  /// This should match your existing upgrade cost logic in EngineeringScreen.
   int getBaseUpgradeCost(String type, int level) {
-    // Replace these with your actual price scaling logic
     switch (type) {
       case 'Hangar': return (5000 * pow(2, level)).toInt();
       case 'Relay': return (10000 * pow(2.5, level)).toInt();
@@ -1196,21 +1254,17 @@ class GameState extends ChangeNotifier {
     }
   }
 
-
   Future<void> nuclearReset() async {
     if (_currentUid == null) return;
     try {
-      // 1. Wipe Cloud and Local Storage
       await FirebaseFirestore.instance.collection('users').doc(_currentUid).delete();
       await FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid).delete();
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
 
-      // 2. STOP the game timers
       _gameTimer?.cancel();
-      _marketTimer?.cancel();
+      // Service timer cancel is handled by service.stop() if exposed, or auto GC when GameState dies.
 
-      // 3. HARD RESET all primitive variables to Level 1 / 0
       solars = 50000;
       ore = 0; gas = 0; crystals = 0;
       hangarLevel = 1;
@@ -1225,72 +1279,40 @@ class GameState extends ChangeNotifier {
       totalContracts = 0;
       hasNamedCompany = false;
 
-      // 4. Reset the Fleet and Logs
       fleet = [];
       missionLogs = [];
       availableMissions = [];
 
-      // 5. Re-inject the Rusty Scow immediately
       _setupStarterShip();
 
       _isInitialized = false;
-
-      // 6. Log Out
       await signOut();
 
-      notifyListeners(); // Force the UI to see the reset state
+      notifyListeners();
     } catch (e) {
       debugPrint("COREY_LOG: Reset failed: $e");
     }
   }
 
-  void _processOfflineSales(DateTime lastSaved) {
-    final now = DateTime.now();
-    int minutesAway = now.difference(lastSaved).inMinutes;
 
-    if (minutesAway < 1) return;
+    void debugSimulateOfflineTime(int minutes) {
+      debugPrint("🕒 DEBUG: Simulating $minutes minutes of offline time...");
 
-    // 1. Run the simulation
-    final result = GameFormulas.calculateOfflineAutoSales(
-      minutesAway: minutesAway,
-      startOre: ore,
-      startGas: gas,
-      startCrystals: crystals,
-      tradeDepotLevel: tradeDepotLevel,
-      maxStorage: maxStorage,
-      marketPrices: {
-        'Ore': getResourcePrice('Ore'),
-        'Gas': getResourcePrice('Gas'),
-        'Crystals': getResourcePrice('Crystals'),
-      },
-    ); // <--- Close the GameFormulas call here
+      // 1. Create a fake timestamp in the past
+      final fakeLastActive = DateTime.now().subtract(Duration(minutes: minutes));
 
-    // 2. Extract results
-    ore = result['newOre'];
-    gas = result['newGas'];
-    crystals = result['newCrystals'];
-    int revenue = result['totalRevenue'];
-    int processed = result['minutesProcessed'];
+      // 2. Force the Trading Service to catch up from that fake time
+      _tradingService.processOfflineCatchup(
+        lastActiveTime: fakeLastActive,
+        tradeDepotLevel: tradeDepotLevel,
+        maxStorage: maxStorage,
+        ore: ore,
+        gas: gas,
+        crystals: crystals,
+      );
 
-    // 3. Add the Log separately
-    if (revenue > 0) {
-      solars += revenue;
-      _addLog(LogEntry(
-        timestamp: now,
-        title: "Offline Trade Earnings",
-        details: "AI processed $processed minutes of sales while you were away. Revenue: ⁂$revenue.",
-        solarChange: revenue,
-        isPositive: true,
-      ));
+      // 3. Force a UI refresh so you see the logs immediately
+      notifyListeners();
     }
-  }
 
-
-
-  @override
-  void dispose() {
-    _gameTimer?.cancel();
-    _marketTimer?.cancel();
-    super.dispose();
-  }
-} // <--- Final class bracket
+}

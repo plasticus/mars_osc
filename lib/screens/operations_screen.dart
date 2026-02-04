@@ -219,7 +219,7 @@ class ShipSummaryCard extends StatelessWidget {
 
   Widget _buildStatusText(Ship ship) {
     if (ship.missionEndTime != null) {
-      return const Text("ON MISSION", style: TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold));
+      return const Text("ON CONTRACT", style: TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold));
     }
     if (ship.busyUntil != null) {
       if (ship.isRepairing) {

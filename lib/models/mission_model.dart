@@ -10,11 +10,11 @@ class Mission {
   final int minShieldLevel;
   final int minCargo;
   
-  final int rewardSolars; // Direct cash payment (Delivery contracts)
-  final String? rewardResource; // "Ore", "Gas", "Crystals" (Mining/Harvesting)
-  final int rewardResourceAmount; 
+  final int rewardSolars;
+  final String? rewardResource;
+  final int rewardResourceAmount;
 
-  final int baseDurationMinutes; // Deprecated/Legacy field, actual duration calculated at runtime
+  final int baseDurationMinutes;
 
   Mission({
     required this.id,
@@ -30,11 +30,41 @@ class Mission {
     required this.baseDurationMinutes,
   });
 
-  // This is the logic your Mission Board uses to enable/disable the Launch button
+  // 1. TO JSON (Save to disk)
+  Map<String, dynamic> toJson() => {
+      'id': id,
+      'title': title,
+      'description': description,
+      'requiredClass': requiredClass,
+      'distanceAU': distanceAU,
+      'minShieldLevel': minShieldLevel,
+      'minCargo': minCargo,
+      'rewardSolars': rewardSolars,
+      'rewardResource': rewardResource,
+      'rewardResourceAmount': rewardResourceAmount,
+      'baseDurationMinutes': baseDurationMinutes,
+    };
+
+  // 2. FROM JSON (Load from disk)
+  factory Mission.fromJson(Map<String, dynamic> json) {
+      return Mission(
+        id: json['id'],
+        title: json['title'],
+        description: json['description'],
+        requiredClass: json['requiredClass'],
+        distanceAU: (json['distanceAU'] as num).toDouble(),
+        minShieldLevel: json['minShieldLevel'],
+        minCargo: json['minCargo'],
+        rewardSolars: json['rewardSolars'],
+        rewardResource: json['rewardResource'],
+        rewardResourceAmount: json['rewardResourceAmount'] ?? 0,
+        baseDurationMinutes: json['baseDurationMinutes'] ?? 0,
+      );
+  }
+
   String? getMissingRequirement(dynamic ship) {
     if (ship.shipClass != requiredClass) return "Needs $requiredClass class";
-    
-    // Updated Range Gate Logic
+
     if (!GameFormulas.canRunMission(distanceAU, ship.fuelCapacity, ship.aiLevel)) {
       return "Insufficient Range (Fuel/AI)";
     }
@@ -42,6 +72,6 @@ class Mission {
     if (ship.shieldLevel < minShieldLevel) return "Shields too weak";
     if (ship.cargoCapacity < minCargo) return "Cargo bay too small";
     if (ship.condition < 0.25) return "Ship requires repairs";
-    return null; 
+    return null;
   }
 }

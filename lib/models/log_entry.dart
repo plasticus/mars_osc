@@ -2,34 +2,50 @@ class LogEntry {
   final DateTime timestamp;
   final String title;
   final String details;
-  final int? solarChange;
+  final int solarChange;
   final bool isPositive;
+  final int oreSold;
+  final int gasSold;
+  final int crystalsSold;
+
+  // NEW FIELD: Snapshot the tech level
+  final int tradeDepotLevel;
 
   LogEntry({
     required this.timestamp,
     required this.title,
     required this.details,
-    this.solarChange,
-    this.isPositive = true,
+    this.solarChange = 0,
+    this.isPositive = false,
+    this.oreSold = 0,
+    this.gasSold = 0,
+    this.crystalsSold = 0,
+    this.tradeDepotLevel = 1, // Default to 1 for old logs
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'timestamp': timestamp.toIso8601String(),
-      'title': title,
-      'details': details,
-      'solarChange': solarChange,
-      'isPositive': isPositive,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+    'timestamp': timestamp.toIso8601String(),
+    'title': title,
+    'details': details,
+    'solarChange': solarChange,
+    'isPositive': isPositive,
+    'oreSold': oreSold,
+    'gasSold': gasSold,
+    'crystalsSold': crystalsSold,
+    'tradeDepotLevel': tradeDepotLevel, // Save it
+  };
 
   factory LogEntry.fromJson(Map<String, dynamic> json) {
     return LogEntry(
       timestamp: DateTime.parse(json['timestamp']),
       title: json['title'],
       details: json['details'],
-      solarChange: json['solarChange'],
-      isPositive: json['isPositive'],
+      solarChange: json['solarChange'] ?? 0,
+      isPositive: json['isPositive'] ?? false,
+      oreSold: json['oreSold'] ?? 0,
+      gasSold: json['gasSold'] ?? 0,
+      crystalsSold: json['crystalsSold'] ?? 0,
+      tradeDepotLevel: json['tradeDepotLevel'] ?? 1, // Load it (default 1)
     );
   }
 }
