@@ -1,4 +1,6 @@
 import 'dart:math';
+import '../models/ship_model.dart';
+import '../models/ship_templates.dart';
 
 /// DATA MANIFEST: The package returned by the Mission Authority.
 /// Defined outside the class for easy access by GameState.
@@ -30,10 +32,10 @@ class GameFormulas {
   static const double rangeScale = 18.0;
   static const double distanceSpan = 31.5;
 
-  static const double liveMinSeconds = 30.0;    // Absolute floor for any mission
+  static const double liveMinSeconds = 30.0; // Absolute floor for any mission
   static const double liveMaxSeconds = 18000.0; // 5 hours (60s * 60m * 5h)
   static const double liveBaseSeconds = 18000.0; // The 5-hour anchor at max distance
-  static const double distExponent = 1.0;       // 1.0 = Linear scaling (easier to balance)
+  static const double distExponent = 1.0; // 1.0 = Linear scaling (easier to balance)
   static const double anchorSpeed = 2.0;
 
   static const double betaScale = 0.015;
@@ -56,15 +58,35 @@ class GameFormulas {
   // --- SHIP TIER DATA ---
   static const Map<String, int> shipTiers = {
     // Mules
-    'Rusty Tug': 1, 'Iron Snail': 2, 'Bulk Carrier': 3, 'Solar Whale': 4, 'Titan Hauler': 5,
+    'Rusty Tug': 1,
+    'Iron Snail': 2,
+    'Bulk Carrier': 3,
+    'Solar Whale': 4,
+    'Titan Hauler': 5,
     // Sprinters
-    'Dart': 1, 'Comet': 2, 'Silver Streak': 3, 'Velocity': 4, 'Warp Shadow': 5,
+    'Dart': 1,
+    'Comet': 2,
+    'Silver Streak': 3,
+    'Velocity': 4,
+    'Warp Shadow': 5,
     // Tankers
-    'Fuel Buoy': 1, 'Gas Giant': 2, 'Deep Oiler': 3, 'Voyager': 4, 'Infinite Reach': 5,
+    'Fuel Buoy': 1,
+    'Gas Giant': 2,
+    'Deep Oiler': 3,
+    'Voyager': 4,
+    'Infinite Reach': 5,
     // Miners
-    'Gravel Picker': 1, 'Rock Biter': 2, 'Ore Hound': 3, 'Asteroid Eater': 4, 'Core Driller': 5,
+    'Gravel Picker': 1,
+    'Rock Biter': 2,
+    'Ore Hound': 3,
+    'Asteroid Eater': 4,
+    'Core Driller': 5,
     // Harvesters
-    'Rift Skimmer': 1, 'Soul Beacon': 2, 'Void Weaver': 3, 'Eon Traveler': 4, 'Singularity': 5,
+    'Rift Skimmer': 1,
+    'Soul Beacon': 2,
+    'Void Weaver': 3,
+    'Eon Traveler': 4,
+    'Singularity': 5,
   };
 
   /// Bridges the gap for screens looking for Tier/Level logic
@@ -74,14 +96,19 @@ class GameFormulas {
   static bool canRunMission(double distanceAU, int fuel, int ai) {
     return getEffectiveRange(fuel, ai) >= getRangeRequired(distanceAU);
   }
+
   static int getShipTier(String modelName) => shipTiers[modelName] ?? 1;
 
   static int getBaseResourceValue(String type) {
     switch (type.toLowerCase()) {
-      case 'ore': return 10;
-      case 'gas': return 25;
-      case 'crystals': return 100;
-      default: return 0;
+      case 'ore':
+        return 10;
+      case 'gas':
+        return 25;
+      case 'crystals':
+        return 100;
+      default:
+        return 0;
     }
   }
 
@@ -105,10 +132,12 @@ class GameFormulas {
     int finalBaseReward = (rewardBase * aiBonusMult).toInt();
 
     // 2. Calculate Physical Resource Amount
-    int finalResourceAmount = (pendingResourceAmount * (1.0 + (aiLevel * 0.05))).toInt();
+    int finalResourceAmount = (pendingResourceAmount * (1.0 + (aiLevel * 0.05)))
+        .toInt();
 
     // 3. Calculate Bonus Foundation (Total market value: Solars + Resources)
-    int resMarketValue = finalResourceAmount * getBaseResourceValue(pendingResource ?? "");
+    int resMarketValue = finalResourceAmount *
+        getBaseResourceValue(pendingResource ?? "");
     int totalValueForBonusMath = finalBaseReward + resMarketValue;
 
     // 4. BRAND REACH: Applies to ALL ships (0.1% per Prestige level)
@@ -135,7 +164,9 @@ class GameFormulas {
 
       if (overflowAmount > 0) {
         // Rushed sale: 75% of market value for the stuff that didn't fit
-        overflowCash = (overflowAmount * getBaseResourceValue(pendingResource) * 0.75).toInt();
+        overflowCash =
+            (overflowAmount * getBaseResourceValue(pendingResource) * 0.75)
+                .toInt();
       }
     }
 
@@ -143,20 +174,23 @@ class GameFormulas {
       baseReward: finalBaseReward,
       brandReachBonus: brandReachBonus,
       vanguardHonorarium: vanguardBonus,
-      totalSolars: finalBaseReward + brandReachBonus + vanguardBonus + overflowCash,
+      totalSolars: finalBaseReward + brandReachBonus + vanguardBonus +
+          overflowCash,
       resourceType: pendingResource ?? "None",
       resourceAmount: actualStored,
       overflowSolars: overflowCash,
     );
   }
 
-  static int calculateBrandReachBonus({required int totalValue, required int broadcastingPrestige}) {
+  static int calculateBrandReachBonus(
+      {required int totalValue, required int broadcastingPrestige}) {
     if (broadcastingPrestige <= 0) return 0;
     double brandReachMult = broadcastingPrestige * 0.001; // 0.1% per level
     return (totalValue * brandReachMult).round();
   }
 
-  static int calculateVanguardHonorarium({required int totalValue, required String modelName, required bool isElite}) {
+  static int calculateVanguardHonorarium(
+      {required int totalValue, required String modelName, required bool isElite}) {
     if (!isElite) return 0;
     int tier = getShipTier(modelName);
     double tierBonus = tier * 0.03; // 3% per Tier
@@ -182,7 +216,8 @@ class GameFormulas {
     return (finalBase * prestigeMult).toInt();
   }
 
-  static int calculateResourceReward({required int baseAmount, required int aiLevel}) {
+  static int calculateResourceReward(
+      {required int baseAmount, required int aiLevel}) {
     return (baseAmount * (1.0 + (aiLevel * 0.05))).toInt();
   }
 
@@ -199,41 +234,44 @@ class GameFormulas {
   }) {
     if (isElite) {
       double totalInvestment = (basePrice + upgradeInvestment).toDouble();
-      return (totalInvestment * eliteValueMultiplier * (0.5 + condition * 0.5)).toInt();
+      return (totalInvestment * eliteValueMultiplier * (0.5 + condition * 0.5))
+          .toInt();
     } else {
       double standardBase = basePrice * 0.7;
       double standardUpgrades = upgradeInvestment * 0.5;
-      return ((standardBase + standardUpgrades) * (0.5 + condition * 0.5)).toInt();
+      return ((standardBase + standardUpgrades) * (0.5 + condition * 0.5))
+          .toInt();
     }
   }
 
-static String generateLegacyName() {
-  final prefixes = [
-    "Vanguard", "Zenith", "Obsidian", "Sovereign", "Stellar",
-    "Infinite", "Absolute", "Eternal", "Apex", "Hallowed",
-    "Crimson", "Ashen", "Ironclad", "Arcane", "Glacial",
-    "Phantom", "Radiant", "Tenebrous", "Umbral", "Golden",
-    "Fathomless", "Indomitable", "Veiled", "Eldritch", "Sundered",
-    "Celestial", "Wrathful", "Onyx", "Primordial", "Spectral", "Maximum",
-    "Winged", "Space", "Black", "Porcine", "Ebony", "Silver", "Green",
-    "Purple", "Blue", "Steel", "Silent", "Violent", "Blonde", "The Last",
-    "The First"
-  ];
+  static String generateLegacyName() {
+    final prefixes = [
+      "Vanguard", "Zenith", "Obsidian", "Sovereign", "Stellar",
+      "Infinite", "Absolute", "Eternal", "Apex", "Hallowed",
+      "Crimson", "Ashen", "Ironclad", "Arcane", "Glacial",
+      "Phantom", "Radiant", "Tenebrous", "Umbral", "Golden",
+      "Fathomless", "Indomitable", "Veiled", "Eldritch", "Sundered",
+      "Celestial", "Wrathful", "Onyx", "Primordial", "Spectral", "Maximum",
+      "Winged", "Space", "Black", "Porcine", "Ebony", "Silver", "Green",
+      "Purple", "Blue", "Steel", "Silent", "Violent", "Blonde", "The Last",
+      "The First"
+    ];
 
-  final nouns = [
-    "Monolith", "Sentinel", "Harbinger", "Paragon", "Conduit",
-    "Aegis", "Catalyst", "Emissary", "Bastion", "Cipher",
-    "Colossus", "Warlock", "Titan", "Specter", "Goliath",
-    "Arbiter", "Veil", "Relic", "Throne", "Oracle",
-    "Archon", "Phantom", "Revenant", "Obelisk", "Warden",
-    "Leviathan", "Dreadnought", "Seraph", "Enigma",
-    "Ghost", "Giant", "Lion", "Whale", "Abyss", "Abomination",
-    "Lance", "Spud", "Eden"
-  ];
+    final nouns = [
+      "Monolith", "Sentinel", "Harbinger", "Paragon", "Conduit",
+      "Aegis", "Catalyst", "Emissary", "Bastion", "Cipher",
+      "Colossus", "Warlock", "Titan", "Specter", "Goliath",
+      "Arbiter", "Veil", "Relic", "Throne", "Oracle",
+      "Archon", "Phantom", "Revenant", "Obelisk", "Warden",
+      "Leviathan", "Dreadnought", "Seraph", "Enigma",
+      "Ghost", "Giant", "Lion", "Whale", "Abyss", "Abomination",
+      "Lance", "Spud", "Eden"
+    ];
 
-  final random = Random();
-  return "${prefixes[random.nextInt(prefixes.length)]} ${nouns[random.nextInt(nouns.length)]}";
-}
+    final random = Random();
+    return "${prefixes[random.nextInt(prefixes.length)]} ${nouns[random.nextInt(
+        nouns.length)]}";
+  }
 
   // --- TRADING & AI SALES ---
 
@@ -253,7 +291,8 @@ static String generateLegacyName() {
 
     int totalMinutesProcessed = min(minutesAway, maxOfflineMinutes);
     int ticks = (totalMinutesProcessed / offlineSaleIntervalMinutes).floor();
-    double multiplier = (1.0 + (tradeDepotLevel * 0.05)) * offlineEfficiencyPenalty;
+    double multiplier = (1.0 + (tradeDepotLevel * 0.05)) *
+        offlineEfficiencyPenalty;
 
     for (int i = 0; i < ticks; i++) {
       var result = _simulateBalancedQuotaTick(
@@ -313,7 +352,8 @@ static String generateLegacyName() {
     required int tradeDepotLevel,
   }) {
     Random rng = Random();
-    double basePercent = tradeDepotLevel * 0.01; //trade depot level affects the amount sold
+    double basePercent = tradeDepotLevel *
+        0.01; //trade depot level affects the amount sold
     double variance = (rng.nextDouble() * 0.004) - 0.002;
     double quotaPercent = basePercent + variance;
 
@@ -343,9 +383,9 @@ static String generateLegacyName() {
       }
     }
 
-    int rev = ( (sOre * (prices['Ore'] ?? 10)) +
+    int rev = ((sOre * (prices['Ore'] ?? 10)) +
         (sGas * (prices['Gas'] ?? 25)) +
-        (sCrystals * (prices['Crystals'] ?? 100)) ).toInt();
+        (sCrystals * (prices['Crystals'] ?? 100))).toInt();
 
     return {
       'soldOre': sOre,
@@ -356,50 +396,162 @@ static String generateLegacyName() {
   }
 
   // --- RANGE & DURATION ---
-  static double getEffectiveRange(int fuel, int ai) => fuel + (aiFuelEfficiency * ai);
+  static double getEffectiveRange(int fuel, int ai) =>
+      fuel + (aiFuelEfficiency * ai);
 
   static int getRangeRequired(double distanceAU) {
     double d = distanceAU.clamp(minDistance, maxDistance);
     return (rangeScale * (d - minDistance) / distanceSpan).ceil();
   }
 
-  static double getEffectiveSpeed(int speed, int ai) => max(0.5, speed + (aiSpeedEfficiency * ai));
+  static double getEffectiveSpeed(int speed, int ai) =>
+      max(0.5, speed + (aiSpeedEfficiency * ai));
 
-    static Duration calculateMissionDuration({
-      required double distanceAU,
-      required int speed,
-      required int ai,
-      required bool isElite,
-      required String shipClass,
-      bool isBetaTiming = false, // We can keep the param to avoid breaking signatures, but ignore it
-    }) {
-      // 1. Clamp distance to your game's range (0.5 to 32.0 AU)
-      double d = distanceAU.clamp(minDistance, maxDistance);
+  static Duration calculateMissionDuration({
+    required double distanceAU,
+    required int speed,
+    required int ai,
+    required bool isElite,
+    required String shipClass,
+    bool isBetaTiming = false, // We can keep the param to avoid breaking signatures, but ignore it
+  }) {
+    // 1. Clamp distance to your game's range (0.5 to 32.0 AU)
+    double d = distanceAU.clamp(minDistance, maxDistance);
 
-      // 2. Calculate speed impact
-      double effectiveSpeed = getEffectiveSpeed(speed, ai);
-      double speedFactor = anchorSpeed / effectiveSpeed;
+    // 2. Calculate speed impact
+    double effectiveSpeed = getEffectiveSpeed(speed, ai);
+    double speedFactor = anchorSpeed / effectiveSpeed;
 
-      // 3. Calculate time based on distance (Linear: d / max)
-      // At 32 AU, this is 1.0 * liveBaseSeconds. At 16 AU, it is 0.5 * liveBaseSeconds.
-      double travelSeconds = (d / maxDistance) * liveBaseSeconds * speedFactor;
+    // 3. Calculate time based on distance (Linear: d / max)
+    // At 32 AU, this is 1.0 * liveBaseSeconds. At 16 AU, it is 0.5 * liveBaseSeconds.
+    double travelSeconds = (d / maxDistance) * liveBaseSeconds * speedFactor;
 
-      // 4. Apply Elite priority docking (1.0 for normal, ~0.5-0.9 for Elite)
-      if (isElite) {
-        travelSeconds *= getPriorityDockingMultiplier(getShipTier(shipClass), isElite);
-      }
+    // 4. Apply Elite priority docking (1.0 for normal, ~0.5-0.9 for Elite)
+    if (isElite) {
+      travelSeconds *=
+          getPriorityDockingMultiplier(getShipTier(shipClass), isElite);
+    }
 
-      // 5. Hard clamp to your 30s - 5h window
-      int finalSeconds = travelSeconds.toInt().clamp(
+    // 5. Hard clamp to your 30s - 5h window
+    int finalSeconds = travelSeconds.toInt().clamp(
         liveMinSeconds.toInt(),
         liveMaxSeconds.toInt()
-      );
+    );
 
-      return Duration(seconds: finalSeconds);
-    }
+    return Duration(seconds: finalSeconds);
+  }
 
   static double getMaxDistanceAU(int fuel, int ai) {
     double effectiveRange = getEffectiveRange(fuel, ai);
     return minDistance + (effectiveRange * distanceSpan / rangeScale);
+  }
+
+// --- ENGINEERING & DRY DOCK MATH ---
+
+  static double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+  static int getTemplatePrice(String modelName) {
+    try {
+      return ShipTemplate.all
+          .firstWhere((t) => t.modelName == modelName)
+          .price;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static int calculateTotalUpgradeInvestment(Ship s) {
+    int investment = 0;
+    final template = ShipTemplate.all.firstWhere((t) =>
+    t.modelName == s.modelName);
+
+    investment += _sumStatCost(s, s.speed, template.baseSpeed);
+    investment += _sumStatCost(s, s.cargoCapacity, template.baseCargo);
+    investment += _sumStatCost(s, s.fuelCapacity, template.baseFuel);
+    investment += _sumStatCost(s, s.shieldLevel, template.baseShield);
+    investment += _sumStatCost(s, s.aiLevel, template.baseAI);
+
+    return investment;
+  }
+
+  static int _sumStatCost(Ship s, int currentLevel, int startLevel) {
+    int total = 0;
+    for (int i = startLevel; i < currentLevel; i++) {
+      total += calculateUpgradeCost(modelName: s.modelName, currentLevel: i);
+    }
+    return total;
+  }
+
+  static int calculateUpgradeCost(
+      {required String modelName, required int currentLevel}) {
+    final price = getTemplatePrice(modelName).toDouble();
+
+    const minPrice = 1000.0;
+    const maxPrice = 420000.0;
+    final valueNorm = ((log(price.clamp(minPrice, maxPrice)) - log(minPrice)) /
+        (log(maxPrice) - log(minPrice)))
+        .clamp(0.0, 1.0);
+
+    final base = _lerp(80.0, 1500.0, valueNorm);
+    final levelFactor = pow(1.22, currentLevel).toDouble();
+
+    return (base * levelFactor).round();
+  }
+
+  static Duration calculateUpgradeDuration({
+    required String modelName,
+    required int currentLevel,
+    double repairSpeedMultiplier = 1.0,
+  }) {
+    final price = getTemplatePrice(modelName).toDouble();
+
+    const minPrice = 1000.0;
+    const maxPrice = 420000.0;
+    final valueNorm = ((log(price.clamp(minPrice, maxPrice)) - log(minPrice)) /
+        (log(maxPrice) - log(minPrice)))
+        .clamp(0.0, 1.0);
+
+    final baseSeconds = _lerp(5.0, 45.0, valueNorm);
+    final levelSeconds = baseSeconds * (1.0 + currentLevel * 0.25);
+    final seconds = (levelSeconds / repairSpeedMultiplier).round().clamp(
+        3, 600);
+
+    return Duration(seconds: seconds);
+  }
+
+  static Duration calculateRepairDuration(Ship ship,
+      double repairSpeedMultiplier) {
+    final damage = (1.0 - ship.condition).clamp(0.0, 1.0);
+
+// We calculate value internally here to keep the API clean
+    final investment = calculateTotalUpgradeInvestment(ship);
+    final basePrice = getTemplatePrice(ship.modelName);
+
+    final sale = calculateShipValue(
+        basePrice: basePrice,
+        upgradeInvestment: investment,
+        condition: ship.condition,
+        isElite: ship.isMaxed
+    ).toDouble();
+
+    const double minSale = 1000;
+    const double maxSale = 420000;
+
+    final logMin = log(minSale);
+    final logMax = log(maxSale);
+    final logSale = log(sale.clamp(minSale, maxSale));
+
+    final valueNorm = ((logSale - logMin) / (logMax - logMin)).clamp(0.0, 1.0);
+
+    final minSeconds = _lerp(5.0, 20.0, valueNorm);
+    final maxSeconds = _lerp(100.0, 666.0, valueNorm);
+    final gamma = _lerp(1.0, 1.8, valueNorm);
+
+    final curvedDamage = pow(damage, gamma).toDouble();
+    var seconds = minSeconds + curvedDamage * (maxSeconds - minSeconds);
+
+    seconds = seconds / repairSpeedMultiplier;
+
+    return Duration(seconds: seconds.round().clamp(2, 3600));
   }
 }

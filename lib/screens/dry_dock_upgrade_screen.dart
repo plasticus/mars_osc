@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_state.dart';
 import '../models/ship_model.dart';
+import '../utils/game_formulas.dart';
 
 class DryDockUpgradeScreen extends StatelessWidget {
   final Ship ship;
@@ -9,8 +10,6 @@ class DryDockUpgradeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<GameState>();
-
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
@@ -65,7 +64,10 @@ class _UpgradeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = Provider.of<GameState>(context);
     final bool isMaxed = current >= max;
-    final int cost = state.getUpgradeCost(ship, current);
+    final int cost = GameFormulas.calculateUpgradeCost(
+        modelName: ship.modelName,
+        currentLevel: current
+    );
     final bool canAfford = state.solars >= cost;
 
     return Padding(

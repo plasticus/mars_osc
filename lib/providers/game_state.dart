@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import '../models/ship_model.dart';
 import '../models/mission_model.dart';
 import '../services/mission_service.dart';
-import '../models/ship_templates.dart';
+import '../services/auth_service.dart';
+import '../models/log_entry.dart';
 import '../utils/game_formulas.dart';
+import '../utils/text_generators.dart';
+import '../utils/debouncer.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -17,54 +19,8 @@ const bool enableDebugButtons = !bool.fromEnvironment('dart.vm.product');
 final _cloudSaveDebouncer = Debouncer(delay: const Duration(seconds: 30));
 // This waits for 30 seconds of "silence" before syncing to the cloud.
 
-class Debouncer {
-  final Duration delay;
-  Timer? _timer;
 
-  Debouncer({required this.delay});
 
-  void run(VoidCallback action) {
-    _timer?.cancel(); // Cancel the old timer if it's still running
-    _timer = Timer(delay, action); // Start a new one
-  }
-}
-
-/// Data class for Mission Logs
-class LogEntry {
-  final DateTime timestamp;
-  final String title;
-  final String details;
-  final int? solarChange;
-  final bool isPositive;
-
-  LogEntry({
-    required this.timestamp,
-    required this.title,
-    required this.details,
-    this.solarChange,
-    this.isPositive = true,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'timestamp': timestamp.toIso8601String(),
-      'title': title,
-      'details': details,
-      'solarChange': solarChange,
-      'isPositive': isPositive,
-    };
-  }
-
-  factory LogEntry.fromJson(Map<String, dynamic> json) {
-    return LogEntry(
-      timestamp: DateTime.parse(json['timestamp']),
-      title: json['title'],
-      details: json['details'],
-      solarChange: json['solarChange'],
-      isPositive: json['isPositive'],
-    );
-  }
-}
 
 void _applyHullWear(Ship ship) {
   double wear = (ship.missionDistance ?? 1.0) * 0.002 * (1.0 - min(0.5, (ship.shieldLevel + ship.aiLevel * 0.5) * 0.02));
@@ -319,49 +275,19 @@ class GameState extends ChangeNotifier {
   }
 
   Future<void> signInWithGoogle() async {
-    try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        scopes: ['email'],
-      );
+    final userCredential = await AuthService.signInWithGoogle();
 
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
-      if (googleUser == null) {
-        debugPrint("Google Sign-In canceled by user");
-        return;
-      }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
-        accessToken: googleAuth.accessToken,
-      );
-
-      final UserCredential userCredential =
-      await FirebaseAuth.instance.signInWithCredential(credential);
-
-      if (userCredential.user?.uid != null) {
-        await initializeUserSession(userCredential.user!.uid);
-      }
-    } catch (e) {
-      debugPrint("Google Sign-In Error: $e");
+    if (userCredential?.user != null) {
+      await initializeUserSession(userCredential!.user!.uid);
     }
   }
 
   Future<void> signOut() async {
-    try {
-      await FirebaseAuth.instance.signOut();
+    await AuthService.signOut();
 
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      await googleSignIn.signOut();
-
-      _currentUid = null;
-      _isInitialized = false;
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Sign out error: $e");
-    }
+    _currentUid = null;
+    _isInitialized = false;
+    notifyListeners();
   }
 
 
@@ -416,12 +342,11 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  // Add near the top of GameState
-  Timer? _localSaveDebounce;
+
+  final _localSaveDebouncer = Debouncer(delay: const Duration(milliseconds: 400));
 
   void _scheduleLocalSave() {
-    _localSaveDebounce?.cancel();
-    _localSaveDebounce = Timer(const Duration(milliseconds: 400), () async {
+    _localSaveDebouncer.run(() async {
       final prefs = await SharedPreferences.getInstance();
       await _saveLocal(prefs);
     });
@@ -512,8 +437,7 @@ class GameState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     solars = 50000;
-    // companyName = "New MOSC Branch"; // OLD
-    companyName = _generateRandomCompanyName(); // NEW: Keep consistent with random names
+    companyName = TextGenerators.generateCompanyName();
     ore = 0; gas = 0; crystals = 0;
     hangarLevel = 1; relayLevel = 1; serverFarmLevel = 0;
     tradeDepotLevel = 1; repairGantryLevel = 0; broadcastingArrayLevel = 1;
@@ -853,86 +777,10 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  Duration getRepairDuration(Ship ship) {
-    final damage = (1.0 - ship.condition).clamp(0.0, 1.0);
-    final sale = getShipSaleValue(ship).toDouble();
 
-    const double minSale = 1000;     // cheapest template-ish
-    const double maxSale = 420000;   // most expensive template-ish
 
-    final logMin = log(minSale);
-    final logMax = log(maxSale);
-    final logSale = log(sale.clamp(minSale, maxSale));
 
-    final valueNorm = ((logSale - logMin) / (logMax - logMin)).clamp(0.0, 1.0);
 
-    final minSeconds = _lerp(5.0, 20.0, valueNorm);
-    final maxSeconds = _lerp(100.0, 666.0, valueNorm);
-
-    final gamma = _lerp(1.0, 1.8, valueNorm);
-
-    final curvedDamage = pow(damage, gamma).toDouble();
-
-    var seconds = minSeconds + curvedDamage * (maxSeconds - minSeconds);
-
-    seconds = seconds / repairSpeedMultiplier;
-
-    final secInt = seconds.round().clamp(2, 3600);
-
-    return Duration(seconds: secInt);
-  }
-
-  double _lerp(double a, double b, double t) => a + (b - a) * t;
-  // --- TEMPLATE LOOKUPS ---
-  int _getTemplatePrice(String modelName) {
-    try {
-      return ShipTemplate.all.firstWhere((t) => t.modelName == modelName).price;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  // --- SHIP UPGRADES (COST + TIME) ---
-  int getUpgradeCost(Ship s, int currentLevel) {
-    // Cost scales with ship model price and how far you’ve pushed the stat.
-    final price = _getTemplatePrice(s.modelName).toDouble();
-
-    // Normalize price to 0..1 using your template range (1k..420k)
-    const minPrice = 1000.0;
-    const maxPrice = 420000.0;
-    final valueNorm = ((log(price.clamp(minPrice, maxPrice)) - log(minPrice)) /
-        (log(maxPrice) - log(minPrice)))
-        .clamp(0.0, 1.0);
-
-    // Base cost: cheap ships ~80, expensive ships ~1500
-    final base = _lerp(80.0, 1500.0, valueNorm);
-
-    // Level scaling: mild exponential so later upgrades cost more
-    final levelFactor = pow(1.22, currentLevel).toDouble();
-
-    return (base * levelFactor).round();
-  }
-
-  Duration getUpgradeDuration(Ship s, int currentLevel) {
-    final price = _getTemplatePrice(s.modelName).toDouble();
-
-    const minPrice = 1000.0;
-    const maxPrice = 420000.0;
-    final valueNorm = ((log(price.clamp(minPrice, maxPrice)) - log(minPrice)) /
-        (log(maxPrice) - log(minPrice)))
-        .clamp(0.0, 1.0);
-
-    // Base seconds: cheap ships ~5s, expensive ships ~45s
-    final baseSeconds = _lerp(5.0, 45.0, valueNorm);
-
-    // Later levels take longer
-    final levelSeconds = baseSeconds * (1.0 + currentLevel * 0.25);
-
-    // Optional: use repair gantry as "better yard tooling" too (speeds upgrades a bit)
-    final seconds = (levelSeconds / repairSpeedMultiplier).round().clamp(3, 600);
-
-    return Duration(seconds: seconds);
-  }
 
   // --- SINGLE SHIP REPAIR (used by DryDock screen) ---
   void repairShip(String shipId) {
@@ -951,7 +799,7 @@ class GameState extends ChangeNotifier {
     solars -= cost;
     s.isRepairing = true;
     s.currentTask = 'Repairing';
-    s.busyUntil = DateTime.now().add(getRepairDuration(s));
+    s.busyUntil = DateTime.now().add(GameFormulas.calculateRepairDuration(s, repairSpeedMultiplier));
 
     _addLog(LogEntry(
       timestamp: DateTime.now(),
@@ -970,7 +818,7 @@ class GameState extends ChangeNotifier {
     for (var s in fleet) {
       if (s.condition < 1.0 && s.busyUntil == null && s.missionEndTime == null) {
         int cost = getRepairCost(s);
-        if (solars >= cost) { solars -= cost; total += cost; s.busyUntil = DateTime.now().add(getRepairDuration(s)); s.currentTask = 'Repairing'; }
+        if (solars >= cost) { solars -= cost; total += cost; s.busyUntil = DateTime.now().add(GameFormulas.calculateRepairDuration(s, repairSpeedMultiplier)); s.currentTask = 'Repairing'; }
       }
     }
     if (total > 0) {
@@ -992,7 +840,7 @@ class GameState extends ChangeNotifier {
     else if (stat == 'shield') { cur = s.shieldLevel; mx = s.maxShield; }
     else if (stat == 'ai') { cur = s.aiLevel; mx = s.maxAI; }
 
-    int cost = getUpgradeCost(s, cur);
+    int cost = GameFormulas.calculateUpgradeCost(modelName: s.modelName, currentLevel: cur);
     if (solars >= cost && cur < mx) {
       solars -= cost;
       if (stat == 'speed') {
@@ -1014,7 +862,11 @@ class GameState extends ChangeNotifier {
         s.renameLocked = true; // Lock it in
       }
 
-      s.busyUntil = DateTime.now().add(getUpgradeDuration(s, cur));
+      s.busyUntil = DateTime.now().add(GameFormulas.calculateUpgradeDuration(
+          modelName: s.modelName,
+          currentLevel: cur,
+          repairSpeedMultiplier: repairSpeedMultiplier
+      ));
       s.currentTask = 'Upgrading';
 
       _triggerUpdate();
@@ -1024,38 +876,6 @@ class GameState extends ChangeNotifier {
   }
 
   int getRepairCost(Ship s) => ((1.0 - s.condition) * (getShipSaleValue(s) * 0.2) * repairCostMultiplier).toInt();
-  int getShipSaleValue(Ship s) {
-    return GameFormulas.calculateShipValue(
-      basePrice: _getTemplatePrice(s.modelName),
-      upgradeInvestment: _calculateTotalUpgradeInvestment(s),
-      condition: s.condition,
-      isElite: s.isMaxed,
-    );
-  }
-
-  /// Calculates every solar spent on this ship's stats using the upgrade cost formula.
-  int _calculateTotalUpgradeInvestment(Ship s) {
-    int investment = 0;
-    // Fetch starting levels from the template to calculate the "delta"
-    final template = ShipTemplate.all.firstWhere((t) => t.modelName == s.modelName);
-
-    investment += _sumStatCost(s, s.speed, template.baseSpeed);
-    investment += _sumStatCost(s, s.cargoCapacity, template.baseCargo);
-    investment += _sumStatCost(s, s.fuelCapacity, template.baseFuel);
-    investment += _sumStatCost(s, s.shieldLevel, template.baseShield);
-    investment += _sumStatCost(s, s.aiLevel, template.baseAI);
-
-
-    return investment;
-  }
-
-  int _sumStatCost(Ship s, int currentLevel, int startLevel) {
-    int total = 0;
-    for (int i = startLevel; i < currentLevel; i++) {
-      total += getUpgradeCost(s, i);
-    }
-    return total;
-  }
 
   void upgradeBase(String type, int cost) {
     if (solars >= cost) {
@@ -1178,6 +998,15 @@ class GameState extends ChangeNotifier {
     _triggerUpdate();
   }
 
+  int getShipSaleValue(Ship s) {
+    return GameFormulas.calculateShipValue(
+      basePrice: GameFormulas.getTemplatePrice(s.modelName),
+      upgradeInvestment: GameFormulas.calculateTotalUpgradeInvestment(s),
+      condition: s.condition,
+      isElite: s.isMaxed,
+    );
+  }
+
 
 
   void sellShip(String id) {
@@ -1192,8 +1021,7 @@ class GameState extends ChangeNotifier {
   }
 
   bool buyShip(Ship s, int cost) {
-    int actualCost = _getTemplatePrice(s.modelName);
-    // Use your hangarLevel logic here directly
+    int actualCost = GameFormulas.getTemplatePrice(s.modelName);
     int currentLimit = hangarLevel == 1 ? 2 : hangarLevel * 2;
 
     if (solars >= actualCost && fleet.length < currentLimit) {
@@ -1368,29 +1196,6 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  //New corp name for new users!@#$
-  String _generateRandomCompanyName() {
-    final List<String> adjectives = [
-      "Heavy", "Deep", "Interstellar", "Prime", "Apex", "Vanguard", "Bulk",
-      "Stellar", "Void", "Infinite", "Solar", "Divine", "Rusty", "Frontier"
-    ];
-    final List<String> nouns = [
-      "Freight", "Haulage", "Cargo", "Transit", "Relay", "Extraction",
-      "Mineral", "Ore", "Orbit", "Voyager", "Asteroid", "Nebula", "Comet",
-      "Forge", "Vector", "Drift"
-    ];
-    final List<String> businessWords = [
-      "Inc.", "Enterprises", "LLC", "Corp", "Solutions", "Group",
-      "Logistics", "Consolidated", "Ventures", "Systems", "Combine", "Syndicate"
-    ];
-
-    final random = Random();
-    String adj = adjectives[random.nextInt(adjectives.length)];
-    String noun = nouns[random.nextInt(nouns.length)];
-    String selectedBiz = businessWords[random.nextInt(businessWords.length)];
-
-    return "$adj $noun $selectedBiz";
-  }
 
   Future<void> nuclearReset() async {
     if (_currentUid == null) return;
