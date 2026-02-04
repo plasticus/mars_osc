@@ -85,3 +85,7 @@ Your Trade Depot AI continues to sell accumulated resources while you are away, 
 ---
 
 *Fly Safe, Commander.*
+
+## License
+
+MIT License. See `LICENSE` for details.
