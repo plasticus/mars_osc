@@ -125,7 +125,7 @@ class MissionLogsScreen extends StatelessWidget {
                 color: Colors.redAccent.withOpacity(0.10),
               ),
               child: TextButton(
-                onPressed: () => state.nuclearReset(), 
+                onPressed: () => state.nuclearReset(),
                 child: const Text(
                   "☢️ SYSTEM_PURGE_PROTOCOL",
                   style: TextStyle(
@@ -197,21 +197,24 @@ class _LogCard extends StatelessWidget {
 
     // Calculate Efficiency / Yield for Trade Logs
     String? efficiencyText;
-        Color efficiencyColor = Colors.lightBlueAccent;
+    Color efficiencyColor = Colors.lightBlueAccent;
 
-        if (log.title.contains("Trade") || log.title.contains("Offline")) {
-          // 5% bonus per level. Level 1 = 105%, Level 5 = 125%
-          int bonusPct = 100 + (log.tradeDepotLevel * 5);
-          efficiencyText = "$bonusPct% Yield";
+    if (log.title.contains("Trade") || log.title.contains("Offline")) {
+      // Calculation: Base 100% + (Level * 5%)
+      // Since you mentioned Level 1 = 105%, the math is (Level * 5) + 100
+      int bonusPct = 100 + (log.tradeDepotLevel * 5);
 
-          // Color Code based on how good the tech is
-          if (log.tradeDepotLevel >= 4) {
-            efficiencyColor = Colors.greenAccent; // High Tech
-          } else if (log.tradeDepotLevel >= 2) {
-            efficiencyColor = Colors.cyanAccent; // Mid Tech
-          } else {
-            efficiencyColor = Colors.blueGrey; // Basic Tech
-          }
+      // Using "Market Efficiency" as the label
+      efficiencyText = "Efficiency: $bonusPct%";
+
+      // Color coding based on tech level
+      if (log.tradeDepotLevel >= 4) {
+        efficiencyColor = Colors.greenAccent; // High Tech (120-125%)
+      } else if (log.tradeDepotLevel >= 2) {
+        efficiencyColor = Colors.cyanAccent; // Mid Tech (110-115%)
+      } else {
+        efficiencyColor = Colors.blueGrey; // Basic Tech (105%)
+      }
     }
 
     return Container(
@@ -279,8 +282,8 @@ class _LogCard extends StatelessWidget {
                         ),
                       ),
 
-                    // CHIPS (Resources Sold)
-                    if (log.oreSold > 0 || log.gasSold > 0 || log.crystalsSold > 0)
+                    // CHIPS (Resources Sold + Profit)
+                    if (log.oreSold > 0 || log.gasSold > 0 || log.crystalsSold > 0 || log.solarChange > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 4, bottom: 6, left: 36),
                         child: Wrap(
@@ -288,6 +291,35 @@ class _LogCard extends StatelessWidget {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            // NEW: Solar Profit Chip
+                            if (log.solarChange > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.yellowAccent.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.yellowAccent.withOpacity(0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text("⁂", style: TextStyle(color: Colors.yellowAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      log.solarChange.toString().replaceAllMapped(
+                                        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                        (Match m) => '${m[1]},'
+                                      ),
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.yellowAccent
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
                             if (log.oreSold > 0) _ResourceChip(icon: Icons.landscape, label: "Ore", value: "-${log.oreSold}", color: Colors.brown),
                             if (log.gasSold > 0) _ResourceChip(icon: Icons.cloud, label: "Gas", value: "-${log.gasSold}", color: Colors.cyan),
                             if (log.crystalsSold > 0) _ResourceChip(icon: Icons.diamond, label: "Crystals", value: "-${log.crystalsSold}", color: Colors.purpleAccent),
@@ -296,17 +328,16 @@ class _LogCard extends StatelessWidget {
                             if (efficiencyText != null)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                margin: const EdgeInsets.only(left: 4),
                                 decoration: BoxDecoration(
-                                  color: efficiencyColor.withValues(alpha:0.1),
+                                  color: efficiencyColor.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: efficiencyColor.withValues(alpha: 0.5)),
+                                  border: Border.all(color: efficiencyColor.withOpacity(0.5)),
                                 ),
                                 child: Text(
                                   efficiencyText,
                                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: efficiencyColor),
                                 ),
-                            ),
+                              ),
                           ],
                         ),
                       ),

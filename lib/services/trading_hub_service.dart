@@ -75,8 +75,7 @@ class TradingHubService {
       -soldCrystals,
       LogEntry(
         timestamp: DateTime.now(),
-        title: "Auto-Trade",
-        // The text now only shows what is LEFT
+        title: "AI Auto-Trader",
         details: "Remaining: ${ore - soldOre} Ore | ${gas - soldGas} Gas | ${crystals - soldCrystals} Crystals",
         solarChange: revenue,
         isPositive: true,

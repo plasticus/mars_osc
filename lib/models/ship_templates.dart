@@ -53,7 +53,7 @@ class ShipTemplate {
     ShipTemplate(shipClass: "Sprinter", modelName: "Comet",        price: 10000,  baseSpeed: 8,  maxSpeed: 12, baseCargo: 2, maxCargo: 3, baseFuel: 1, maxFuel: 1, baseShield: 1, maxShield: 2, baseAI: 4,  maxAI: 8),
     ShipTemplate(shipClass: "Sprinter", modelName: "Silver Streak",price: 40000, baseSpeed: 10, maxSpeed: 15, baseCargo: 3, maxCargo: 4, baseFuel: 1, maxFuel: 1, baseShield: 2, maxShield: 3, baseAI: 6,  maxAI: 11),
     ShipTemplate(shipClass: "Sprinter", modelName: "Velocity",     price: 160000, baseSpeed: 14, maxSpeed: 19, baseCargo: 4, maxCargo: 5, baseFuel: 1, maxFuel: 1, baseShield: 2, maxShield: 3, baseAI: 8,  maxAI: 13),
-    ShipTemplate(shipClass: "Sprinter", modelName: "Warp Shadow",  price: 640000, baseSpeed: 16, maxSpeed: 20, baseCargo: 5, maxCargo: 6, baseFuel: 1, maxFuel: 1, baseShield: 2, maxShield: 3, baseAI: 10, maxAI: 16),
+    ShipTemplate(shipClass: "Sprinter", modelName: "Warp Shadow",  price: 640000, baseSpeed: 16, maxSpeed: 20, baseCargo: 5, maxCargo: 6, baseFuel: 1, maxFuel: 1, baseShield: 2, maxShield: 4, baseAI: 10, maxAI: 16),
 
     // ======================
     // MINER — slowest, best shields, low AI, moderate range
