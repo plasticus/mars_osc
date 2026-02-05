@@ -77,8 +77,8 @@ class MissionLogsScreen extends StatelessWidget {
             // 2. FORCE SAVE (Green)
             _buildDebugButton(
               context,
-              label: "DEBUG: 💾 FORCE CLOUD SAVE",
-              color: Colors.greenAccent,
+              label: "💾 FORCE LOCAL SAVE",
+              color: Colors.brown,
               icon: Icons.save,
               onPressed: () {
                 state.debugSave();
@@ -91,12 +91,12 @@ class MissionLogsScreen extends StatelessWidget {
             // 3. REPLENISH CONTRACTS (Blue)
             _buildDebugButton(
               context,
-              label: "DEBUG: 🔄 REFRESH CONTRACTS",
-              color: Colors.blueAccent,
-              icon: Icons.refresh,
+              label: "💾 FORCE CLOUD SAVE",
+              color: Colors.greenAccent,
+              icon: Icons.save,
               onPressed: () {
-                state.generateNewMissions();
-                _showSnack(context, "Contract board regenerated.", Colors.blue);
+                state.uploadLocalSaveToCloud(force: true);
+                _showSnack(context, "Uploading Registry to Mars...", Colors.green);
               },
             ),
 
@@ -125,9 +125,9 @@ class MissionLogsScreen extends StatelessWidget {
                 color: Colors.redAccent.withOpacity(0.10),
               ),
               child: TextButton(
-                onPressed: () => state.nuclearReset(), // Assuming you have this method
+                onPressed: () => state.nuclearReset(), 
                 child: const Text(
-                  "DEBUG: ☢️ SYSTEM_PURGE_PROTOCOL",
+                  "☢️ SYSTEM_PURGE_PROTOCOL",
                   style: TextStyle(
                     color: Colors.redAccent,
                     fontSize: 11,

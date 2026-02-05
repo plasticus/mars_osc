@@ -90,10 +90,15 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _ensureUserDefaults(String uid) async {
-    if (companyName == "Establishing Link..." || companyName == "Searching Registry...") {
-      debugPrint("⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
-      return;
-    }
+      // ONLY abort if the user has actually started playing (fleet exists)
+      // but hasn't named the company.
+      // If fleet is empty, we MUST let the sync proceed so we can pull the cloud save.
+      if (fleet.isNotEmpty &&
+         (companyName == "Establishing Link..." || companyName == "Searching Registry...")) {
+        debugPrint("⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
+        return;
+      }
+
 
     final ref = FirebaseFirestore.instance.collection('users').doc(uid);
     final snap = await ref.get();
@@ -180,14 +185,15 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
       final snap = await docRef.get();
 
-      // Only ensure defaults / new-user detection.
-      // DO NOT apply cloud data into the game state here.
       if (!snap.exists) {
+        // BRAND NEW USER: Create the doc with defaults
         await _ensureUserDefaults(uid);
         isNewUser = true;
       } else {
-        await _ensureUserDefaults(uid);
+        // RETURNING USER: Do NOT run _ensureUserDefaults yet.
+        // This protects the cloud data so main.dart can restore it.
         isNewUser = false;
+        debugPrint("☁️ CLOUD: Account found. Standing by for main.dart restore.");
       }
 
       isLoading = false;
@@ -480,67 +486,84 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-  Future<void> uploadLocalSaveToCloud() async {
+  DateTime? _lastCloudSave; // Track the last successful sync
+
+  Future<void> uploadLocalSaveToCloud({bool force = false}) async {
     if (_currentUid == null) return;
+
+    // 1. COOLDOWN GATE: Skip if we synced less than 5 minutes ago
+    final now = DateTime.now();
+    if (!force && _lastCloudSave != null &&
+        now.difference(_lastCloudSave!) < const Duration(minutes: 5)) {
+      debugPrint("☁️ CLOUD: Sync skipped (Cooldown active).");
+      return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
 
-    // Make sure local is freshly saved first (so blob matches current state)
+    // 2. Ensure local is freshly saved first
     await _saveLocal(prefs);
 
     final jsonStr = prefs.getString('mosc_save');
     if (jsonStr == null) return;
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUid)
-        .set({
-          'saveBlob': jsonStr,
-          'saveVersion': 1,
-          'saveLastActiveTime': _lastActiveTime.toIso8601String(),
-          'saveUpdatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUid)
+          .set({
+            'saveBlob': jsonStr,
+            'saveVersion': 1,
+            'saveLastActiveTime': _lastActiveTime.toIso8601String(),
+            'saveUpdatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+      _lastCloudSave = now; // 3. Update the cooldown timer on success
+      debugPrint("✅ CLOUD: Save successful for $companyName.");
+    } catch (e) {
+      debugPrint("❌ CLOUD: Save failed: $e");
+    }
   }
 
   Future<void> restoreFromCloudIfNewer({bool force = false}) async {
-    if (_currentUid == null) return;
+    if (_currentUid == null) {
+      debugPrint("📂 CLOUD: Restore aborted. No UID.");
+      return;
+    }
 
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUid)
-        .get();
-
+    final doc = await FirebaseFirestore.instance.collection('users').doc(_currentUid).get();
     final data = doc.data();
-    if (data == null) return;
+
+    if (data == null || !data.containsKey('saveBlob')) {
+      debugPrint("📂 CLOUD: No save blob found in Firestore for UID: $_currentUid");
+      return;
+    }
 
     final cloudBlob = data['saveBlob'] as String?;
-    if (cloudBlob == null) return;
-
-    // Compare timestamps so you don’t overwrite newer local
     final cloudTimeStr = data['saveLastActiveTime'] as String?;
     final cloudTime = cloudTimeStr != null ? DateTime.tryParse(cloudTimeStr) : null;
 
-    // If not forcing, only restore if cloud is newer than local
+    debugPrint("📂 CLOUD: Blob found. Size: ${cloudBlob?.length} chars. Cloud Time: $cloudTime. Local Time: $_lastActiveTime");
+
     if (!force && cloudTime != null) {
       if (_lastActiveTime.isAfter(cloudTime)) {
-        // Local is newer; do nothing.
+        debugPrint("📂 CLOUD: Skipping restore. Local save is newer.");
         return;
       }
     }
 
-    // Write cloud blob into local prefs
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('mosc_save', cloudBlob);
+    await prefs.setString('mosc_save', cloudBlob!);
 
-    // Now reload local (this repopulates missions, fleet, everything)
+    debugPrint("📂 CLOUD: Disk write successful. Reloading local state...");
     await _loadData();
 
-    // Safety: if missions missing after restore, generate them
     if (availableMissions.isEmpty) {
       generateNewMissions();
     }
 
     notifyListeners();
+    debugPrint("📂 CLOUD: RESTORE COMPLETE. Company: $companyName");
   }
 
 
@@ -563,6 +586,12 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _triggerUpdate() {
+    // NEW: Do not trigger an auto-save if we are still initializing
+    if (companyName == "Establishing Link..." || companyName == "Searching Registry...") {
+      debugPrint("💾 SAVE BLOCKED: Still in link-establishment phase.");
+      return;
+    }
+
     _scheduleLocalSave();
     notifyListeners();
   }

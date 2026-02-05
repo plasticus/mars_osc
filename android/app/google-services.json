@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "358044541015-5kij2hv11ov4gd1ob20qoklfed7a9gg7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.coreym.mars_osc",
+            "certificate_hash": "c103165b9284e8988ebca8035431ab2256b00002"
+          }
+        },
+        {
           "client_id": "358044541015-gfp6shrki48a564s0nro5fnh42r3hkoh.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

@@ -9,14 +9,13 @@ import 'screens/login_screen.dart';
 import 'screens/dry_dock_screen.dart';
 import 'screens/mission_board_screen.dart';
 import 'screens/operations_screen.dart';
-import 'screens/corporate_hub_screen.dart'; // Updated import
+import 'screens/corporate_hub_screen.dart';
 import 'screens/engineering_screen.dart';
 import 'screens/new_user_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase with the generated options
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -66,7 +65,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // 1) Waiting for Firebase Auth
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
@@ -74,8 +72,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         final state = context.watch<GameState>();
         final user = snapshot.data;
 
-        // 2) Wait until local load is done before doing cloud work
-        // (Your GameState sets isLoading false after _loadData finishes now.)
         if (state.isLoading) {
           return const Scaffold(
             body: Center(
@@ -91,49 +87,78 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // 3) Run connect/restore logic ONCE after local load is done
         final uid = user?.uid;
 
         if (_lastUid != uid) {
           _lastUid = uid;
-
           Future.microtask(() async {
             if (!mounted) return;
             if (uid != null) {
               await state.connectCloudSession(uid);
 
               if (!state.hasLocalSave) {
+                debugPrint("⚡ MAIN: No local save. Triggering FORCE restore...");
                 await state.restoreFromCloudIfNewer(force: true);
               }
             }
-
             state.startLoopsIfNeeded();
           });
         }
 
-
-        // 4) Handle Errors or New Users
         return Consumer<GameState>(
           builder: (context, state, child) {
             if (state.initError != null || state.isNewUser) {
               return const NewUserScreen();
             }
 
-            // If not logged in
             if (user == null) {
               return const LoginScreen();
             }
 
-            // Everything is good
             return child!;
           },
-          child: const MainNavigationScreen(),
+          child: const MainLifecycleWrapper(), // Updated to the Wrapper
         );
       },
     );
   }
 }
 
+/// NEW WRAPPER: Handles the save-on-exit logic for the whole session
+class MainLifecycleWrapper extends StatefulWidget {
+  const MainLifecycleWrapper({super.key});
+
+  @override
+  State<MainLifecycleWrapper> createState() => _MainLifecycleWrapperState();
+}
+
+class _MainLifecycleWrapperState extends State<MainLifecycleWrapper> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this); // Start listening
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Clean up
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Accessing GameState via context.read to trigger the cloud sync
+    if (state == AppLifecycleState.paused) {
+      debugPrint("🛰️ LIFECYCLE: App minimized. Pushing Registry to cloud...");
+      context.read<GameState>().uploadLocalSaveToCloud();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const MainNavigationScreen();
+  }
+}
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -148,7 +173,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Automa
   @override
   bool get wantKeepAlive => true;
 
-  // Updated titles for the AppBar
   final List<String> _titles = [
     'Operations',
     'Dry Dock',
@@ -159,10 +183,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Automa
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
     final state = context.watch<GameState>();
 
-    // Updated screen list to include the new Hub
     final List<Widget> screens = [
       const OperationsScreen(),
       const DryDockScreen(),
