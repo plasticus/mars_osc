@@ -3,46 +3,57 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/game_state.dart';
 import 'mission_logs_screen.dart';
+import 'milestones_screen.dart';
 
 class CorporateHubScreen extends StatelessWidget {
   const CorporateHubScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          _buildHubTile(
-            context,
-            "CORPORATE PROFILE",
-            "View assets and rebrand branch",
-            Icons.business_center,
-            Colors.blueGrey,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CorporateInfoView())),
-          ),
-          const SizedBox(height: 16),
-          _buildHubTile(
-            context,
-            "GALACTIC LEADERBOARD",
-            "Real-time corporate rankings",
-            Icons.leaderboard,
-            Colors.amber,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LeaderboardView())),
-          ),
-          const SizedBox(height: 16),
-          _buildHubTile(
-            context,
-            "OPERATION LOGS",
-            "Historical mission data",
-            Icons.history,
-            Colors.deepOrange,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MissionLogsScreen())),
-          ),
-        ],
-      ),
-    );
-  }
+    Widget build(BuildContext context) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            _buildHubTile(
+              context,
+              "CORPORATE PROFILE",
+              "View assets and rebrand branch",
+              Icons.business_center,
+              Colors.blueGrey,
+                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CorporateInfoView())),
+            ),
+            const SizedBox(height: 16),
+            _buildHubTile(
+              context,
+              "GALACTIC LEADERBOARD",
+              "Real-time corporate rankings",
+              Icons.leaderboard,
+              Colors.amber,
+                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LeaderboardView())),
+            ),
+            const SizedBox(height: 16),
+            // NEW MILESTONES TILE
+            _buildHubTile(
+              context,
+              "CORPORATE MILESTONES",
+              "Galactic historical firsts",
+              Icons.emoji_events,
+              Colors.cyanAccent,
+                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MilestonesScreen())),
+            ),
+            const SizedBox(height: 16),
+            _buildHubTile(
+              context,
+              "OPERATION LOGS",
+              "Historical mission data",
+              Icons.history,
+              Colors.deepOrange,
+                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MissionLogsScreen())),
+            ),
+          ],
+        ),
+      );
+    }
 
   Widget _buildHubTile(BuildContext context, String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
