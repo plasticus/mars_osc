@@ -1,5 +1,6 @@
 import '../models/milestone_model.dart';
 import 'dart:async';
+import '../providers/game_state.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -153,6 +154,5 @@ class MilestoneService {
       }
     });
   }
-
 
 }
