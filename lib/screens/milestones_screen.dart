@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // REQUIRED
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../models/milestone_model.dart';
-import '../services/milestone_service.dart';
 
 class MilestonesScreen extends StatelessWidget {
   const MilestonesScreen({super.key});
