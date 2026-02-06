@@ -874,8 +874,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       _addLog(LogEntry(
         timestamp: now,
         title: "Contract Launched",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship
-            .nickname} sent to ${mission.title}.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} "
+            "sent to ${mission.title} (${mission.distanceAU} AU).",
         isPositive: true,
         distance: mission.distanceAU,
       ));
