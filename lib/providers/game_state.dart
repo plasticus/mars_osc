@@ -671,10 +671,11 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   double get globalAIBonus {
-    if (serverFarmLevel == 1) return 0.5;
-    if (serverFarmLevel == 2) return 1.0;
-    if (serverFarmLevel == 3) return 2.0;
-    return 0.0;
+    double base = 0.0;
+    if (serverFarmLevel == 1) base = 0.5;
+    if (serverFarmLevel == 2) base = 1.0;
+    if (serverFarmLevel == 3) base = 2.0;
+    return base + (serverFarmPrestige * 0.1);
   }
 
   // UI-facing bonus summaries
@@ -833,6 +834,16 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     ship.currentTask = null;
   }
 
+  // The getter that the UI should be pointing to
+  double get contractSpeedBonusPct {
+    // Base Level: 0.33% per level (reaching ~1.0% at Level 3)
+    double baseBonus = serverFarmLevel * 0.33;
+    // Prestige: 0.1% per prestige level
+    double prestigeBonus = serverFarmPrestige * 0.1;
+    return baseBonus + prestigeBonus;
+  }
+
+
   void startMission(String shipId, Mission mission) {
     final shipIndex = fleet.indexWhere((s) => s.id == shipId);
     if (shipIndex != -1) {
@@ -846,6 +857,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         isBetaTiming: isBetaTiming,
         isElite: ship.isMaxed,
         shipClass: ship.shipClass,
+        globalSpeedBonus: contractSpeedBonusPct,
       );
 
       ship.missionStartTime = now;

@@ -1,6 +1,5 @@
 import '../models/milestone_model.dart';
 import 'dart:async';
-import '../providers/game_state.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -155,37 +154,5 @@ class MilestoneService {
     });
   }
 
-  void _showGlobalAnnouncement(BuildContext context, String title, String winner) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("🚀 MARS REGISTRY: $winner has claimed '$title'!"),
-        backgroundColor: Colors.cyanAccent.withValues(alpha: 0.9),
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-
-  // 3. ICON STRING MAPPER
-  String _getIconName(IconData icon) {
-    if (icon == Icons.bug_report) return 'bug_report';
-    if (icon == Icons.badge) return 'badge';
-    if (icon == Icons.monetization_on) return 'monetization_on';
-    if (icon == Icons.account_balance) return 'account_balance';
-    if (icon == Icons.local_shipping) return 'local_shipping';
-    if (icon == Icons.anchor) return 'anchor';
-    if (icon == Icons.bolt) return 'bolt';
-    if (icon == Icons.precision_manufacturing) return 'precision_manufacturing';
-    if (icon == Icons.ev_station) return 'ev_station';
-    if (icon == Icons.auto_awesome) return 'auto_awesome';
-    if (icon == Icons.groups) return 'groups';
-    if (icon == Icons.explore) return 'explore';
-    if (icon == Icons.layers) return 'layers';
-    if (icon == Icons.air) return 'air';
-    if (icon == Icons.diamond) return 'diamond';
-    if (icon == Icons.castle) return 'castle';
-    return 'help_outline';
-  }
 
 }

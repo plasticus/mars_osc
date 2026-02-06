@@ -413,32 +413,23 @@ class GameFormulas {
     required int ai,
     required bool isElite,
     required String shipClass,
-    bool isBetaTiming = false, // We can keep the param to avoid breaking signatures, but ignore it
+    double globalSpeedBonus = 0.0,
+    bool isBetaTiming = false,
   }) {
-    // 1. Clamp distance to your game's range (0.5 to 32.0 AU)
     double d = distanceAU.clamp(minDistance, maxDistance);
-
-    // 2. Calculate speed impact
     double effectiveSpeed = getEffectiveSpeed(speed, ai);
     double speedFactor = anchorSpeed / effectiveSpeed;
 
-    // 3. Calculate time based on distance (Linear: d / max)
-    // At 32 AU, this is 1.0 * liveBaseSeconds. At 16 AU, it is 0.5 * liveBaseSeconds.
     double travelSeconds = (d / maxDistance) * liveBaseSeconds * speedFactor;
 
-    // 4. Apply Elite priority docking (1.0 for normal, ~0.5-0.9 for Elite)
     if (isElite) {
-      travelSeconds *=
-          getPriorityDockingMultiplier(getShipTier(shipClass), isElite);
+      travelSeconds *= getPriorityDockingMultiplier(getShipTier(shipClass), isElite);
     }
 
-    // 5. Hard clamp to your 30s - 5h window
-    int finalSeconds = travelSeconds.toInt().clamp(
-        liveMinSeconds.toInt(),
-        liveMaxSeconds.toInt()
-    );
+    double globalMultiplier = 1.0 - (globalSpeedBonus / 100);
+    travelSeconds *= globalMultiplier;
 
-    return Duration(seconds: finalSeconds);
+    return Duration(seconds: max(10, travelSeconds.round()));
   }
 
   static double getMaxDistanceAU(int fuel, int ai) {
