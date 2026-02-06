@@ -70,8 +70,8 @@ class EngineeringScreen extends StatelessWidget {
           currentLevel: state.serverFarmLevel,
           maxLevel: 3,
           infoLine:
-              "Current Fleet AI Bonus: **+${state.globalAIBonus.toStringAsFixed(1)}**\n"
-              "Contract Speed Bonus: +${(state.globalAIBonus * 0.5).toStringAsFixed(1)}%",
+                "Current Fleet AI Bonus: **+${state.globalAIBonus.toStringAsFixed(1)}**\n"
+                "Contract Speed Bonus: +${state.contractSpeedBonusPct.toStringAsFixed(1)}%",
           upgrades: {
             1: _BaseUpgradeData(8000, "All Fleet AI +0.5"),
             2: _BaseUpgradeData(20000, "All Fleet AI +1.0"),
