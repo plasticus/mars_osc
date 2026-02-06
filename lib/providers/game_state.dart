@@ -568,6 +568,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         'saveLastActiveTime': _lastActiveTime.toIso8601String(),
         'saveUpdatedAt': FieldValue.serverTimestamp(),
         'netWorth': netWorth,
+        'solars': solars,
         'totalContractsCompleted': totalContractsCompleted,
       }, SetOptions(merge: true));
 
@@ -854,6 +855,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       ship.pendingReward = mission.rewardSolars;
       ship.pendingResource = mission.rewardResource;
       ship.pendingResourceAmount = mission.rewardResourceAmount;
+      ship.missionDistance = mission.distanceAU;
 
       availableMissions.removeWhere((m) => m.id == mission.id);
 
@@ -875,6 +877,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         details: "${ship.isMaxed ? '[Elite] ' : ''}${ship
             .nickname} sent to ${mission.title}.",
         isPositive: true,
+        distance: mission.distanceAU,
       ));
       milestoneService.requestCheck(this);
       _triggerUpdate();
@@ -914,8 +917,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Contract Completed: ${ship.nickname}",
-      details: "Earnings: ⁂${results.totalSolars} and ${results
-          .resourceAmount}m³ ${results.resourceType}",
+      details: "Earnings: ⁂${results.totalSolars}${results.resourceAmount > 0 ? ' '
+          'and ${results.resourceAmount}m³ ${results.resourceType}' : ''}",
       isPositive: true,
       distance: ship.missionDistance ?? 0.0, // Assumes Ship has missionDistance
     ));

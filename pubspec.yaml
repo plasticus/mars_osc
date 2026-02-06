@@ -2,7 +2,7 @@ name: mars_osc
 description: "Mars Orbital Shipping Company"
 publish_to: 'none'
 
-version: 0.95.2+27
+version: 0.95.2+30
 
 environment:
   sdk: ^3.5.0
