@@ -1,48 +1,72 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/game_state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // REQUIRED
 import '../models/milestone_model.dart';
-// Import your service here once integrated
+import '../services/milestone_service.dart';
 
 class MilestonesScreen extends StatelessWidget {
   const MilestonesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Eventually, you'll fetch this list from your MilestoneService/Backend
-    final List<Milestone> milestones = []; // Placeholder for your data
-
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text("CORPORATE MILESTONES", style: TextStyle(letterSpacing: 1.5, fontSize: 16)),
+        title: const Text(
+          "CORPORATE MILESTONES",
+          style: TextStyle(letterSpacing: 1.5, fontSize: 16),
+        ),
         backgroundColor: Colors.black45,
         elevation: 0,
       ),
       body: Column(
         children: [
           _buildHeader(),
-          Expanded(
-            child: milestones.isEmpty
-              ? const Center(child: Text("Connecting to Galactic Registry...", style: TextStyle(color: Colors.grey)))
-              : ListView.separated(
-                  itemCount: milestones.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.white10),
-                  itemBuilder: (context, index) {
-                    final m = milestones[index];
-                    return _MilestoneTile(milestone: m, isEven: index % 2 == 0);
-                  },
-                ),
-          ),
+          Expanded(child: _buildMilestoneStream()),
         ],
       ),
+    );
+  }
+
+  Widget _buildMilestoneStream() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('milestones')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+        final milestones = snapshot.data!.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return Milestone(
+            id: doc.id,
+            title: data['title'] ?? 'Unknown',
+            description: data['description'] ?? '',
+            icon: Milestone.getIconFromString(data['iconName']), // Now works!
+            winnerName: data['winnerName'],
+            wonAt: (data['wonAt'] as Timestamp?)?.toDate(),
+          );
+        }).toList();
+
+        if (milestones.isEmpty) {
+          return const Center(child: Text("Registry empty. Long-press title to seed.", style: TextStyle(color: Colors.grey)));
+        }
+
+        return ListView.separated(
+          itemCount: milestones.length,
+          separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.white10),
+          itemBuilder: (context, index) {
+            return _MilestoneTile(milestone: milestones[index], isEven: index % 2 == 0);
+          },
+        );
+      },
     );
   }
 
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.blueGrey.withOpacity(0.1),
+      color: Colors.blueGrey.withValues(alpha: 0.1),
       child: const Row(
         children: [
           Icon(Icons.emoji_events, color: Colors.amberAccent, size: 20),
@@ -59,6 +83,7 @@ class MilestonesScreen extends StatelessWidget {
   }
 }
 
+// Ensure this class is included at the bottom of the same file
 class _MilestoneTile extends StatelessWidget {
   final Milestone milestone;
   final bool isEven;
@@ -72,46 +97,36 @@ class _MilestoneTile extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: isEven ? Colors.transparent : Colors.white.withOpacity(0.02),
+      color: isEven ? Colors.transparent : Colors.white.withValues(alpha: 0.02),
       child: Row(
         children: [
-          // STATUS ICON
           Icon(
-            claimed ? Icons.check_circle : Icons.radio_button_unchecked,
-            size: 18,
-            color: claimed ? Colors.greenAccent : Colors.grey[800],
+            milestone.icon,
+            size: 28,
+            color: claimed ? Colors.greenAccent : Colors.blueGrey[400],
           ),
           const SizedBox(width: 16),
-
-          // TEXT CONTENT
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   milestone.title.toUpperCase(),
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
+                  style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   milestone.description,
-                  style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 11),
+                  style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 11),
                 ),
               ],
             ),
           ),
-
-          // WINNER DISPLAY
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                claimed ? milestone.winnerName!.toUpperCase() : "UNCLAIMED",
+                claimed ? (milestone.winnerName ?? "ERROR").toUpperCase() : "UNCLAIMED",
                 style: TextStyle(
                   color: claimed ? Colors.orangeAccent : Colors.grey[800],
                   fontWeight: FontWeight.bold,

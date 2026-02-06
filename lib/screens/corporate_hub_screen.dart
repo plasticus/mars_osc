@@ -92,10 +92,8 @@ class CorporateInfoView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<GameState>();
-
-    // Net Worth = Solars + Total Ship Sale Value
-    int fleetValue = state.fleet.fold(0, (sum, ship) => sum + state.getShipSaleValue(ship));
-    int netWorth = state.solars + fleetValue;
+    int netWorth = state.netWorth;
+    int fleetValue = state.fleet.fold(0, (total, ship) => total + state.getShipSaleValue(ship));
 
     return Scaffold(
       appBar: AppBar(title: const Text("Corporate Profile")),

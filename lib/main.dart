@@ -135,9 +135,10 @@ class MainLifecycleWrapper extends StatefulWidget {
 class _MainLifecycleWrapperState extends State<MainLifecycleWrapper> with WidgetsBindingObserver {
   @override
   void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this); // Start listening
-  }
+      super.initState();
+      WidgetsBinding.instance.addObserver(this);
+      context.read<GameState>().milestoneService.initializeGlobalListener();
+    }
 
   @override
   void dispose() {

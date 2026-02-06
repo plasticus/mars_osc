@@ -24,7 +24,7 @@ class MissionLogsScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.satellite_alt, size: 64, color: Colors.grey.withOpacity(0.2)),
+                  Icon(Icons.satellite_alt, size: 64, color: Colors.grey.withValues(alpha: 0.2)),
                   const SizedBox(height: 16),
                   const Text("No records found.", style: TextStyle(color: Colors.grey)),
                   // Show debug buttons even if list is empty
@@ -120,9 +120,9 @@ class MissionLogsScreen extends StatelessWidget {
             // 5. NUCLEAR OPTION (Red)
             Container(
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
                 borderRadius: BorderRadius.circular(6),
-                color: Colors.redAccent.withOpacity(0.10),
+                color: Colors.redAccent.withValues(alpha: 0.10),
               ),
               child: TextButton(
                 onPressed: () => state.nuclearReset(),
@@ -150,7 +150,7 @@ class MissionLogsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(color: color.withValues(alpha: 0.5)),
         borderRadius: BorderRadius.circular(8),
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
       ),
       child: InkWell(
         onTap: onPressed,
@@ -223,7 +223,7 @@ class _LogCard extends StatelessWidget {
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2)),
         ],
       ),
       clipBehavior: Clip.antiAlias,
@@ -296,9 +296,9 @@ class _LogCard extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.yellowAccent.withOpacity(0.1),
+                                  color: Colors.yellowAccent.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: Colors.yellowAccent.withOpacity(0.4)),
+                                  border: Border.all(color: Colors.yellowAccent.withValues(alpha: 0.4)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -329,9 +329,9 @@ class _LogCard extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: efficiencyColor.withOpacity(0.1),
+                                  color: efficiencyColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: efficiencyColor.withOpacity(0.5)),
+                                  border: Border.all(color: efficiencyColor.withValues(alpha: 0.5)),
                                 ),
                                 child: Text(
                                   efficiencyText,
@@ -418,9 +418,9 @@ class _ResourceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

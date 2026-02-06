@@ -7,6 +7,7 @@ import '../models/ship_model.dart';
 import '../models/mission_model.dart';
 import '../services/mission_service.dart';
 import '../services/auth_service.dart';
+import '../services/milestone_service.dart';
 import '../services/trading_hub_service.dart'; // IMPORT NEW SERVICE
 import '../models/log_entry.dart';
 import '../utils/game_formulas.dart';
@@ -44,8 +45,6 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   bool _loopsStarted = false;
   bool _hasLocalSave = false;
 
-
-
   // Resource Inventory
   int ore = 0;
   int gas = 0;
@@ -72,10 +71,10 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   List<LogEntry> missionLogs = [];
 
   final MissionService _missionService = MissionService();
-  late TradingHubService _tradingService; // NEW SERVICE
+  late TradingHubService _tradingService;
+  final MilestoneService milestoneService = MilestoneService();
 
   Timer? _gameTimer;
-  // Timer? _marketTimer; // REMOVED OLD TIMER
 
   bool _isInitialized = false;
   bool isBetaTiming = true;
@@ -90,52 +89,33 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _ensureUserDefaults(String uid) async {
-      // ONLY abort if the user has actually started playing (fleet exists)
-      // but hasn't named the company.
-      // If fleet is empty, we MUST let the sync proceed so we can pull the cloud save.
-      if (fleet.isNotEmpty &&
-         (companyName == "Establishing Link..." || companyName == "Searching Registry...")) {
-        debugPrint("⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
-        return;
-      }
-
+    // We keep this safety check to prevent accidental overwrites during linking
+    if (fleet.isNotEmpty &&
+       (companyName == "Establishing Link..." || companyName == "Searching Registry...")) {
+      debugPrint("⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
+      return;
+    }
 
     final ref = FirebaseFirestore.instance.collection('users').doc(uid);
     final snap = await ref.get();
-    final data = snap.data() ?? <String, dynamic>{};
-    final Map<String, dynamic> missing = {};
 
-    void ensure(String key, dynamic value) {
-      if (!data.containsKey(key)) missing[key] = value;
+    // Only initialize if the document is missing entirely
+    if (!snap.exists) {
+      await ref.set({
+        'hasNamedCompany': false,
+        'solars': 50000,
+        'isNewUser': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint("📂 CLOUD: Initialized new user document.");
     }
+  }
 
-    if (companyName != "Establishing Link..." && companyName != "Searching Registry...") {
-      ensure('companyName', companyName);
-    }
-    ensure('hasNamedCompany', hasNamedCompany);
-    ensure('solars', solars);
-    ensure('ore', ore);
-    ensure('gas', gas);
-    ensure('crystals', crystals);
-    ensure('hangarLevel', hangarLevel);
-    ensure('relayLevel', relayLevel);
-    ensure('serverFarmLevel', serverFarmLevel);
-    ensure('tradeDepotLevel', tradeDepotLevel);
-    ensure('repairGantryLevel', repairGantryLevel);
-    ensure('broadcastingArrayLevel', broadcastingArrayLevel);
-    ensure('tradeDepotPrestige', tradeDepotPrestige);
-    ensure('broadcastingArrayPrestige', broadcastingArrayPrestige);
-    ensure('serverFarmPrestige', serverFarmPrestige);
-    ensure('nextMissionRefresh', (nextMissionRefresh ?? DateTime.now()).toIso8601String());
-    ensure('lastActiveTime', _lastActiveTime.toIso8601String()); // ENSURE CLOUD HAS TIME
-
-    if (missing.isNotEmpty) {
-      if (snap.exists) {
-        await ref.update(missing);
-      } else {
-        await ref.set(missing);
-      }
-    }
+  int get netWorth {
+    int liquid = solars;
+    int fleetAppraisal = fleet.fold(0, (total, ship) => total + getShipSaleValue(ship));
+    int facilityValue = calculateBaseUpgradeInvestment();
+    return liquid + fleetAppraisal + facilityValue;
   }
 
   GameState() {
@@ -298,7 +278,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     if (now.difference(_lastLeaderboardWrite).inSeconds < 120) return;
 
     // Calculate fleet value (you already do this in _saveData)
-    final int fleetValue = fleet.fold(0, (sum, ship) => sum + getShipSaleValue(ship));
+    final int fleetValue = fleet.fold(0, (total, ship) => total + getShipSaleValue(ship));
 
     Ship? topShip;
     int topShipVal = 0;
@@ -807,7 +787,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}.",
         isPositive: true,
       ));
-
+      milestoneService.requestCheck(this);
       _triggerUpdate();
     }
   }
@@ -856,6 +836,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     _applyHullWear(ship);
+    milestoneService.requestCheck(this);
 
     _addLog(LogEntry(
       timestamp: DateTime.now(),
