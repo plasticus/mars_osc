@@ -68,6 +68,35 @@ class MilestoneService {
         case 'contracts_1000':
           if (state.totalContracts >= 1000) met = true;
           break;
+
+        case 'ore_50000':
+          if (state.totalOreHarvested >= 50000) met = true;
+          break;
+
+        case 'gas_50000':
+          if (state.totalGasHarvested >= 50000) met = true;
+          break;
+
+        case 'crystals_50000':
+          if (state.totalCrystalsHarvested >= 50000) met = true;
+          break;
+
+        case 'dist_30au':
+          // This looks at your missionLogs for any entry where the distance was >= 30
+          final longHaul = state.missionLogs.any((mission) => mission.distance >= 30);
+          if (longHaul) met = true;
+          break;
+
+        case 'max_base':
+          if (state.hangarLevel >= 5 &&
+              state.relayLevel >= 4 && // Based on your logs, Relay is capped at 4
+              state.serverFarmLevel >= 5 &&
+              state.tradeDepotLevel >= 5 &&
+              state.repairGantryLevel >= 5 &&
+              state.broadcastingArrayLevel >= 5) {
+            met = true;
+          }
+          break;
       }
 
       if (met) {
@@ -159,4 +188,4 @@ class MilestoneService {
     return 'help_outline';
   }
 
-} // <--- Final closing bracket
+}

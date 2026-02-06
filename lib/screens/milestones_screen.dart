@@ -6,14 +6,84 @@ import '../services/milestone_service.dart';
 class MilestonesScreen extends StatelessWidget {
   const MilestonesScreen({super.key});
 
+  void _showSeedConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Reset Registry?"),
+        content: const Text("This will re-initialize all milestones with current goals. Existing winners will be cleared!"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () {
+              _seedMilestones();
+              Navigator.pop(context);
+            },
+            child: const Text("SEED", style: TextStyle(color: Colors.orangeAccent))
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _seedMilestones() async {
+    final batch = FirebaseFirestore.instance.batch();
+    final collection = FirebaseFirestore.instance.collection('milestones');
+
+    final List<Map<String, dynamic>> roster = [
+      // Core Progress
+      {'id': 'rename_company', 'title': 'Corporate Identity', 'description': 'First company to rename themselves', 'iconName': 'badge', 'goalValue': 1},
+      {'id': 'solars_10m', 'title': 'Deca-Millionaire', 'description': 'First company worth 10M Solars', 'iconName': 'monetization_on', 'goalValue': 10000000},
+      {'id': 'solars_50m', 'title': 'Centurion Club', 'description': 'First company worth 50M Solars', 'iconName': 'account_balance', 'goalValue': 50000000},
+
+      // Logistics & Distance
+      {'id': 'contracts_1000', 'title': 'Logistics Legend', 'description': 'First company to complete 1000 contracts', 'iconName': 'local_shipping', 'goalValue': 1000},
+      {'id': 'dist_30au', 'title': 'Long Haul Hero', 'description': 'First company to complete a contract over 30 AU', 'iconName': 'explore', 'goalValue': 30},
+
+      // Resource Milestones (Updated to 50k)
+      {'id': 'ore_50000', 'title': 'Mineral Mogul', 'description': 'First company to mine 50,000 m3 of Ore', 'iconName': 'layers', 'goalValue': 50000},
+      {'id': 'gas_50000', 'title': 'Atmospheric Tycoon', 'description': 'First company to harvest 50,000 m3 of Gas', 'iconName': 'air', 'goalValue': 50000},
+      {'id': 'crystals_50000', 'title': 'Resonance King', 'description': 'First company to harvest 50,000 m3 of Crystals', 'iconName': 'diamond', 'goalValue': 50000},
+
+      // Tier 5 Specialist Classes
+      {'id': 'tier5_mule', 'title': 'Heavy Hauler Expert', 'description': 'First company to have a Tier 5 Mule', 'iconName': 'anchor', 'goalValue': 5},
+      {'id': 'tier5_sprinter', 'title': 'Void Racer', 'description': 'First company to have a Tier 5 Sprinter', 'iconName': 'bolt', 'goalValue': 5},
+      {'id': 'tier5_miner', 'title': 'Core Stripper', 'description': 'First company to have a Tier 5 Miner', 'iconName': 'precision_manufacturing', 'goalValue': 5},
+      {'id': 'tier5_tanker', 'title': 'Gas Giant', 'description': 'First company to have a Tier 5 Tanker', 'iconName': 'ev_station', 'goalValue': 5},
+      {'id': 'tier5_harvester', 'title': 'Rift Walker', 'description': 'First company to have a Tier 5 Harvester', 'iconName': 'auto_awesome', 'goalValue': 5},
+
+      // End Game
+      {'id': 'all_tier5', 'title': 'Fleet Master', 'description': 'First company to have a Tier 5 ship of every class', 'iconName': 'groups', 'goalValue': 5},
+      {'id': 'max_base', 'title': 'Command Center', 'description': 'First company to Max out base upgrades', 'iconName': 'castle', 'goalValue': 5},
+    ];
+
+    for (var m in roster) {
+      final docRef = collection.doc(m['id']);
+      batch.set(docRef, {
+        'title': m['title'],
+        'description': m['description'],
+        'iconName': m['iconName'],
+        'goalValue': m['goalValue'], // Server now knows the target
+        'winnerName': null,
+        'wonAt': null,
+      });
+    }
+
+    await batch.commit();
+    debugPrint("🚀 REGISTRY: Seeding complete.");
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text(
-          "CORPORATE MILESTONES",
-          style: TextStyle(letterSpacing: 1.5, fontSize: 16),
+        title: GestureDetector(
+          onLongPress: () => _showSeedConfirmation(context), // The "Magic" trigger
+          child: const Text(
+            "CORPORATE MILESTONES",
+            style: TextStyle(letterSpacing: 1.5, fontSize: 16),
+          ),
         ),
         backgroundColor: Colors.black45,
         elevation: 0,

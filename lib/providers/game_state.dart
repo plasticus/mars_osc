@@ -24,22 +24,45 @@ void _applyHullWear(Ship ship) {
   ship.condition = (ship.condition - wear).clamp(0.0, 1.0);
 }
 
+
+class SaveConflict {
+  final DateTime localTime;
+  final int localNetWorth;
+  final int localContracts;
+
+  final DateTime cloudTime;
+  final int cloudNetWorth;
+  final int cloudContracts;
+
+  SaveConflict({
+    required this.localTime, required this.localNetWorth, required this.localContracts,
+    required this.cloudTime, required this.cloudNetWorth, required this.cloudContracts,
+  });
+}
+
+
 class GameState extends ChangeNotifier with WidgetsBindingObserver {
   int solars = 50000;
   String companyName = "Establishing Link...";
   bool hasNamedCompany = false;
+  int totalOreHarvested = 0;
+  int totalGasHarvested = 0;
+  int totalCrystalsHarvested = 0;
+  int totalContractsCompleted = 0;
 
   // Auth State
   User? currentUser;
   String? _currentUid;
 
   User? get user => FirebaseAuth.instance.currentUser;
+
   String? get currentUid => _currentUid;
 
   // --- NEW USER FLOW VARIABLES ---
   bool isNewUser = false;
   String? initError;
   bool isLoading = false;
+
   bool get hasLocalSave => _hasLocalSave;
   bool autoCloudBackupEnabled = false;
   bool _loopsStarted = false;
@@ -88,11 +111,38 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void _unpackSaveBlob(String? blob) async {
+    if (blob == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('mosc_save', blob); // Save to disk first
+    await _loadData(); // Then trigger the existing load sequence
+    notifyListeners();
+  }
+
+  SaveConflict? activeConflict;
+
+  // 2. Fix the resolution logic to use the stored data
+  void resolveConflict({required bool useCloud}) {
+    if (useCloud && _pendingCloudData != null) {
+      _unpackSaveBlob(_pendingCloudData!['saveBlob']);
+      debugPrint("🪐 CONFLICT: Restored Cloud Blob.");
+    } else {
+      debugPrint("📱 CONFLICT: Kept Local. Cloud will overwrite on next save.");
+    }
+
+    activeConflict = null;
+    _pendingCloudData = null;
+    notifyListeners();
+  }
+
+
   Future<void> _ensureUserDefaults(String uid) async {
     // We keep this safety check to prevent accidental overwrites during linking
     if (fleet.isNotEmpty &&
-       (companyName == "Establishing Link..." || companyName == "Searching Registry...")) {
-      debugPrint("⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
+        (companyName == "Establishing Link..." ||
+            companyName == "Searching Registry...")) {
+      debugPrint(
+          "⚠️ Safety Gate: Aborting cloud sync to prevent data overwrite.");
       return;
     }
 
@@ -113,7 +163,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
   int get netWorth {
     int liquid = solars;
-    int fleetAppraisal = fleet.fold(0, (total, ship) => total + getShipSaleValue(ship));
+    int fleetAppraisal = fleet.fold(
+        0, (total, ship) => total + getShipSaleValue(ship));
     int facilityValue = calculateBaseUpgradeInvestment();
     return liquid + fleetAppraisal + facilityValue;
   }
@@ -149,9 +200,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       isLoading = false;
       initError = null;
       notifyListeners();
-
-    });
-  }
+    }); // { closes .then() }
+  } // this closes GameState() Constructor#@!%
 
   Future<void> connectCloudSession(String uid) async {
     if (_currentUid == uid && _isInitialized) return;
@@ -173,7 +223,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         // RETURNING USER: Do NOT run _ensureUserDefaults yet.
         // This protects the cloud data so main.dart can restore it.
         isNewUser = false;
-        debugPrint("☁️ CLOUD: Account found. Standing by for main.dart restore.");
+        debugPrint(
+            "☁️ CLOUD: Account found. Standing by for main.dart restore.");
       }
 
       isLoading = false;
@@ -189,47 +240,46 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
 
   @override
-    void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       debugPrint("⏸️ App Paused: Saving State...");
       Future.microtask(() async {
         final prefs = await SharedPreferences.getInstance();
-        await _saveLocal(prefs);       // force local save now
-        await syncLeaderboardNow();    // cheap + throttled
+        await _saveLocal(prefs);
+        await syncLeaderboardNow();
       });
     }
 
-
-      if (state == AppLifecycleState.resumed) {
-        // User came back: Run the Catch-up logic!
-        debugPrint("▶️ App Resumed: Checking Offline Sales...");
-        _loadData().then((_) {
-           // Reload data first to ensure we have the latest timestamp, then process
-          _tradingService.processOfflineCatchup(
-            lastActiveTime: _lastActiveTime,
-            tradeDepotLevel: tradeDepotLevel,
-            maxStorage: maxStorage,
-            ore: ore,
-            gas: gas,
-            crystals: crystals,
-          );
-          notifyListeners();
-        });
-      }
+    if (state == AppLifecycleState.resumed) {
+      debugPrint("▶️ App Resumed: Checking Offline Sales...");
+      _loadData().then((_) {
+        _tradingService.processOfflineCatchup(
+          lastActiveTime: _lastActiveTime,
+          tradeDepotLevel: tradeDepotLevel,
+          maxStorage: maxStorage,
+          ore: ore,
+          gas: gas,
+          crystals: crystals,
+        );
+        notifyListeners();
+      });
     }
+  }
 
-    @override
-    void dispose() {
-      WidgetsBinding.instance.removeObserver(this); // <--- CLEANUP
-      _gameTimer?.cancel();
-      _tradingService.stop();
-      super.dispose();
-    }
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _gameTimer?.cancel();
+    _tradingService.stop();
+    super.dispose();
+  }
 
   void _setupStarterShip() {
     fleet = [
       Ship(
-        id: "starter_${DateTime.now().millisecondsSinceEpoch}",
+        id: "starter_${DateTime
+            .now()
+            .millisecondsSinceEpoch}",
         nickname: "The Rusty Scow",
         modelName: "Rusty Tug",
         shipClass: "Mule",
@@ -255,7 +305,6 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
 
-
   Future<void> signInWithGoogle() async {
     final userCredential = await AuthService.signInWithGoogle();
     if (userCredential?.user != null) {
@@ -275,10 +324,13 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
     final now = DateTime.now();
     // Hard throttle: no more than once every 2 minutes
-    if (now.difference(_lastLeaderboardWrite).inSeconds < 120) return;
+    if (now
+        .difference(_lastLeaderboardWrite)
+        .inSeconds < 120) return;
 
-    // Calculate fleet value (you already do this in _saveData)
-    final int fleetValue = fleet.fold(0, (total, ship) => total + getShipSaleValue(ship));
+    // Calculate fleet value
+    final int fleetValue = fleet.fold(
+        0, (total, ship) => total + getShipSaleValue(ship));
 
     Ship? topShip;
     int topShipVal = 0;
@@ -314,10 +366,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-
-
-
-  final _localSaveDebouncer = Debouncer(delay: const Duration(milliseconds: 400));
+  final _localSaveDebouncer = Debouncer(
+      delay: const Duration(milliseconds: 400));
 
   void _scheduleLocalSave() {
     _localSaveDebouncer.run(() async {
@@ -327,144 +377,165 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _saveLocal(SharedPreferences prefs) async {
-      try {
-        _lastActiveTime = DateTime.now();
+    try {
+      _lastActiveTime = DateTime.now();
 
-        // 1. Construct the map
-        final local = <String, dynamic>{
-          'companyName': companyName,
-          'solars': solars,
-          'crystals': crystals,
-          'ore': ore,
-          'gas': gas,
-          'hangarLevel': hangarLevel,
-          'relayLevel': relayLevel, // This should be 4!
-          'tradeDepotLevel': tradeDepotLevel,
-          'tradeDepotPrestige': tradeDepotPrestige,
-          'broadcastingArrayLevel': broadcastingArrayLevel,
-          'broadcastingArrayPrestige': broadcastingArrayPrestige,
-          'serverFarmLevel': serverFarmLevel,
-          'serverFarmPrestige': serverFarmPrestige,
-          'repairGantryLevel': repairGantryLevel,
-          'nextMissionRefresh': (nextMissionRefresh ?? DateTime.now()).toIso8601String(),
-          'lastActiveTime': _lastActiveTime.toIso8601String(),
-          'fleet': fleet.map((s) => s.toJson()).toList(),
-          'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
-          'availableMissions': availableMissions.map((m) => m.toJson()).toList(),
-        };
+      // 1. Construct the map
+      final local = <String, dynamic>{
+        'companyName': companyName,
+        'solars': solars,
+        'crystals': crystals,
+        'ore': ore,
+        'gas': gas,
+        'hangarLevel': hangarLevel,
+        'relayLevel': relayLevel, // This should be 4!
+        'tradeDepotLevel': tradeDepotLevel,
+        'tradeDepotPrestige': tradeDepotPrestige,
+        'broadcastingArrayLevel': broadcastingArrayLevel,
+        'broadcastingArrayPrestige': broadcastingArrayPrestige,
+        'serverFarmLevel': serverFarmLevel,
+        'serverFarmPrestige': serverFarmPrestige,
+        'repairGantryLevel': repairGantryLevel,
+        'nextMissionRefresh': (nextMissionRefresh ?? DateTime.now())
+            .toIso8601String(),
+        'lastActiveTime': _lastActiveTime.toIso8601String(),
+        'fleet': fleet.map((s) => s.toJson()).toList(),
+        'missionLogs': missionLogs.map((l) => l.toJson()).toList(),
+        'availableMissions': availableMissions.map((m) => m.toJson()).toList(),
+        'totalOreHarvested': totalOreHarvested,
+        'totalGasHarvested': totalGasHarvested,
+        'totalCrystalsHarvested': totalCrystalsHarvested,
+        'totalContractsCompleted': totalContractsCompleted,
+      };
 
-        // 2. Attempt to Encode (This is likely where it crashes)
-        final String encodedJson = jsonEncode(local);
+      // 2. Attempt to Encode
+      final String encodedJson = jsonEncode(local);
 
-        // 3. Write to disk
-        await prefs.setString('mosc_save', encodedJson);
+      // 3. Write to disk
+      await prefs.setString('mosc_save', encodedJson);
 
-        debugPrint("✅ SAVE SUCCESS: Wrote Relay Level $relayLevel and ${availableMissions.length} missions.");
-
-      } catch (e) {
-        // THIS is the error we need to see
-        debugPrint("🛑 SAVE FAILED: $e");
-        //debugLoadError = "SAVE FAILED: $e"; // Show it on the UI if you added that feature
-      }
+      debugPrint(
+          "✅ SAVE SUCCESS: Wrote Relay Level $relayLevel and ${availableMissions
+              .length} missions.");
+    } catch (e) {
+      debugPrint("🛑 SAVE FAILED: $e");
     }
+  }
 
   Future<void> _loadData() async {
-      debugPrint("📂 LOAD: Starting safe load sequence...");
-      try {
-        final prefs = await SharedPreferences.getInstance();
+    debugPrint("📂 LOAD: Starting safe load sequence...");
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-        // 1. Try to load the "Box" (New Format)
-        final String? jsonStr = prefs.getString('mosc_save');
-        _hasLocalSave = (jsonStr != null);
+      // 1. Try to load the "Box" (New Format)
+      final String? jsonStr = prefs.getString('mosc_save');
+      _hasLocalSave = (jsonStr != null);
 
 
-        if (jsonStr != null) {
-          final Map<String, dynamic> local = jsonDecode(jsonStr);
+      if (jsonStr != null) {
+        final Map<String, dynamic> local = jsonDecode(jsonStr);
 
-          // --- A. LOAD TIMESTAMPS (Safely) ---
-          try {
-            if (local['lastActiveTime'] != null) {
-              _lastActiveTime = DateTime.tryParse(local['lastActiveTime']) ?? DateTime.now();
-            }
-            if (local['nextMissionRefresh'] != null) {
-              nextMissionRefresh = DateTime.tryParse(local['nextMissionRefresh']);
-            }
-          } catch (e) {
-            debugPrint("⚠️ LOAD ERROR (Timestamps): $e");
+        // --- A. LOAD TIMESTAMPS (Safely) ---
+        try {
+          if (local['lastActiveTime'] != null) {
+            _lastActiveTime =
+                DateTime.tryParse(local['lastActiveTime']) ?? DateTime.now();
           }
-
-          // --- B. LOAD STATS (Safely) ---
-          try {
-            companyName = local['companyName'] ?? companyName;
-            solars = (local['solars'] as num?)?.toInt() ?? solars;
-            ore = (local['ore'] as num?)?.toInt() ?? ore;
-            gas = (local['gas'] as num?)?.toInt() ?? gas;
-            crystals = (local['crystals'] as num?)?.toInt() ?? crystals;
-
-            hangarLevel = (local['hangarLevel'] as num?)?.toInt() ?? hangarLevel;
-            relayLevel = (local['relayLevel'] as num?)?.toInt() ?? relayLevel;
-            tradeDepotLevel = (local['tradeDepotLevel'] as num?)?.toInt() ?? tradeDepotLevel;
-            tradeDepotPrestige = (local['tradeDepotPrestige'] as num?)?.toInt() ?? tradeDepotPrestige;
-            broadcastingArrayLevel = (local['broadcastingArrayLevel'] as num?)?.toInt() ?? broadcastingArrayLevel;
-            broadcastingArrayPrestige = (local['broadcastingArrayPrestige'] as num?)?.toInt() ?? broadcastingArrayPrestige;
-            serverFarmLevel = (local['serverFarmLevel'] as num?)?.toInt() ?? serverFarmLevel;
-            serverFarmPrestige = (local['serverFarmPrestige'] as num?)?.toInt() ?? serverFarmPrestige;
-            repairGantryLevel = (local['repairGantryLevel'] as num?)?.toInt() ?? repairGantryLevel;
-          } catch (e) {
-            debugPrint("⚠️ LOAD ERROR (Stats): $e");
+          if (local['nextMissionRefresh'] != null) {
+            nextMissionRefresh = DateTime.tryParse(local['nextMissionRefresh']);
           }
-
-          // --- C. LOAD LISTS (Safely) ---
-
-          // Fleet
-          try {
-            if (local['fleet'] != null) {
-              fleet = (local['fleet'] as List)
-                  .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
-                  .toList();
-            }
-          } catch (e) {
-            debugPrint("⚠️ LOAD ERROR (Fleet): $e");
-          }
-
-          // Logs
-          try {
-            if (local['missionLogs'] != null) {
-              missionLogs = (local['missionLogs'] as List)
-                  .map((m) => LogEntry.fromJson(Map<String, dynamic>.from(m)))
-                  .toList();
-            }
-          } catch (e) {
-            debugPrint("⚠️ LOAD ERROR (Logs): $e");
-          }
-
-          // Missions (The likely culprit)
-          try {
-            if (local['availableMissions'] != null) {
-              availableMissions = (local['availableMissions'] as List)
-                  .map((m) => Mission.fromJson(Map<String, dynamic>.from(m)))
-                  .toList();
-              debugPrint("✅ LOAD: Restored ${availableMissions.length} missions.");
-            }
-          } catch (e) {
-            debugPrint("⚠️ LOAD ERROR (Missions): $e");
-            // If missions fail to load, we clear the list so the Safety Check generates new ones
-            availableMissions = [];
-          }
-
-        } else {
-          // --- PATH B: LEGACY FALLBACK ---
-          debugPrint("⚠️ LOAD: No box found, trying legacy keys...");
-          // (Keep your existing legacy loading logic here if you want,
-          // or just let it start fresh since you reinstalled)
-          relayLevel = prefs.getInt('relayLevel') ?? 1;
-          // ... etc ...
+        } catch (e) {
+          debugPrint("⚠️ LOAD ERROR (Timestamps): $e");
         }
 
-      } catch (e) {
-        debugPrint("🛑 CRITICAL LOAD FAILURE: $e");
+        // --- B. LOAD STATS (Safely) ---
+        try {
+          companyName = local['companyName'] ?? companyName;
+          solars = (local['solars'] as num?)?.toInt() ?? solars;
+          ore = (local['ore'] as num?)?.toInt() ?? ore;
+          gas = (local['gas'] as num?)?.toInt() ?? gas;
+          crystals = (local['crystals'] as num?)?.toInt() ?? crystals;
+
+          hangarLevel = (local['hangarLevel'] as num?)?.toInt() ?? hangarLevel;
+          relayLevel = (local['relayLevel'] as num?)?.toInt() ?? relayLevel;
+          tradeDepotLevel =
+              (local['tradeDepotLevel'] as num?)?.toInt() ?? tradeDepotLevel;
+          tradeDepotPrestige = (local['tradeDepotPrestige'] as num?)?.toInt() ??
+              tradeDepotPrestige;
+          broadcastingArrayLevel =
+              (local['broadcastingArrayLevel'] as num?)?.toInt() ??
+                  broadcastingArrayLevel;
+          broadcastingArrayPrestige =
+              (local['broadcastingArrayPrestige'] as num?)?.toInt() ??
+                  broadcastingArrayPrestige;
+          serverFarmLevel =
+              (local['serverFarmLevel'] as num?)?.toInt() ?? serverFarmLevel;
+          serverFarmPrestige = (local['serverFarmPrestige'] as num?)?.toInt() ??
+              serverFarmPrestige;
+          repairGantryLevel = (local['repairGantryLevel'] as num?)?.toInt() ??
+              repairGantryLevel;
+          totalOreHarvested =
+              (local['totalOreHarvested'] as num?)?.toInt() ?? 0;
+          totalGasHarvested =
+              (local['totalGasHarvested'] as num?)?.toInt() ?? 0;
+          totalCrystalsHarvested =
+              (local['totalCrystalsHarvested'] as num?)?.toInt() ?? 0;
+          totalContractsCompleted =
+              (local['totalContractsCompleted'] as num?)?.toInt() ?? 0;
+        } catch (e) {
+          debugPrint("⚠️ LOAD ERROR (Stats): $e");
+        }
+
+        // --- C. LOAD LISTS (Safely) ---
+
+        // Fleet
+        try {
+          if (local['fleet'] != null) {
+            fleet = (local['fleet'] as List)
+                .map((m) => Ship.fromJson(Map<String, dynamic>.from(m)))
+                .toList();
+          }
+        } catch (e) {
+          debugPrint("⚠️ LOAD ERROR (Fleet): $e");
+        }
+
+        // Logs
+        try {
+          if (local['missionLogs'] != null) {
+            missionLogs = (local['missionLogs'] as List)
+                .map((m) => LogEntry.fromJson(Map<String, dynamic>.from(m)))
+                .toList();
+          }
+        } catch (e) {
+          debugPrint("⚠️ LOAD ERROR (Logs): $e");
+        }
+
+        // Missions (The likely culprit)
+        try {
+          if (local['availableMissions'] != null) {
+            availableMissions = (local['availableMissions'] as List)
+                .map((m) => Mission.fromJson(Map<String, dynamic>.from(m)))
+                .toList();
+            debugPrint(
+                "✅ LOAD: Restored ${availableMissions.length} missions.");
+          }
+        } catch (e) {
+          debugPrint("⚠️ LOAD ERROR (Missions): $e");
+          // If missions fail to load, we clear the list so the Safety Check generates new ones
+          availableMissions = [];
+        }
+      } else {
+        // --- PATH B: LEGACY FALLBACK ---
+        debugPrint("⚠️ LOAD: No box found, trying legacy keys...");
+        // (Keep your existing legacy loading logic here if you want,
+        // or just let it start fresh since you reinstalled)
+        relayLevel = prefs.getInt('relayLevel') ?? 1;
+        // ... etc ...
       }
+    } catch (e) {
+      debugPrint("🛑 CRITICAL LOAD FAILURE: $e");
     }
+  }
 
   DateTime? _lastCloudSave; // Track the last successful sync
 
@@ -492,11 +563,13 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
           .collection('users')
           .doc(_currentUid)
           .set({
-            'saveBlob': jsonStr,
-            'saveVersion': 1,
-            'saveLastActiveTime': _lastActiveTime.toIso8601String(),
-            'saveUpdatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+        'saveBlob': jsonStr,
+        'saveVersion': 1,
+        'saveLastActiveTime': _lastActiveTime.toIso8601String(),
+        'saveUpdatedAt': FieldValue.serverTimestamp(),
+        'netWorth': netWorth,
+        'totalContractsCompleted': totalContractsCompleted,
+      }, SetOptions(merge: true));
 
       _lastCloudSave = now; // 3. Update the cooldown timer on success
       debugPrint("✅ CLOUD: Save successful for $companyName.");
@@ -505,47 +578,47 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  Map<String, dynamic>? _pendingCloudData;
+
   Future<void> restoreFromCloudIfNewer({bool force = false}) async {
-    if (_currentUid == null) {
-      debugPrint("📂 CLOUD: Restore aborted. No UID.");
+    if (_currentUid == null) return;
+
+    final ref = FirebaseFirestore.instance.collection('users').doc(_currentUid);
+    final snap = await ref.get();
+    if (!snap.exists) return;
+
+    final cloudData = snap.data()!;
+    final cloudTimeStr = cloudData['saveLastActiveTime'] as String?;
+    final cloudTime = cloudTimeStr != null
+        ? DateTime.tryParse(cloudTimeStr)
+        : null;
+
+    // 1. If forcing (manual sync), skip the check and just load
+    if (force) {
+      _unpackSaveBlob(cloudData['saveBlob']);
       return;
     }
 
-    final doc = await FirebaseFirestore.instance.collection('users').doc(_currentUid).get();
-    final data = doc.data();
-
-    if (data == null || !data.containsKey('saveBlob')) {
-      debugPrint("📂 CLOUD: No save blob found in Firestore for UID: $_currentUid");
+    // 2. CONFLICT CHECK: Local is newer than Cloud by > 1 minute
+    if (cloudTime != null &&
+        _lastActiveTime.isAfter(cloudTime.add(const Duration(minutes: 1)))) {
+      _pendingCloudData = cloudData;
+      activeConflict = SaveConflict(
+        localTime: _lastActiveTime,
+        localNetWorth: netWorth,
+        localContracts: totalContractsCompleted,
+        cloudTime: cloudTime,
+        cloudNetWorth: (cloudData['netWorth'] as num?)?.toInt() ?? 0,
+        cloudContracts: (cloudData['totalContractsCompleted'] as num?)
+            ?.toInt() ?? 0,
+      );
+      notifyListeners();
       return;
     }
 
-    final cloudBlob = data['saveBlob'] as String?;
-    final cloudTimeStr = data['saveLastActiveTime'] as String?;
-    final cloudTime = cloudTimeStr != null ? DateTime.tryParse(cloudTimeStr) : null;
-
-    debugPrint("📂 CLOUD: Blob found. Size: ${cloudBlob?.length} chars. Cloud Time: $cloudTime. Local Time: $_lastActiveTime");
-
-    if (!force && cloudTime != null) {
-      if (_lastActiveTime.isAfter(cloudTime)) {
-        debugPrint("📂 CLOUD: Skipping restore. Local save is newer.");
-        return;
-      }
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('mosc_save', cloudBlob!);
-
-    debugPrint("📂 CLOUD: Disk write successful. Reloading local state...");
-    await _loadData();
-
-    if (availableMissions.isEmpty) {
-      generateNewMissions();
-    }
-
-    notifyListeners();
-    debugPrint("📂 CLOUD: RESTORE COMPLETE. Company: $companyName");
+    // 3. Normal path: Cloud is newer or same age, just load it
+    _unpackSaveBlob(cloudData['saveBlob']);
   }
-
 
 
   Future<void> resetProgress() async {
@@ -553,9 +626,15 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     await prefs.clear();
     solars = 50000;
     companyName = TextGenerators.generateCompanyName();
-    ore = 0; gas = 0; crystals = 0;
-    hangarLevel = 1; relayLevel = 1; serverFarmLevel = 0;
-    tradeDepotLevel = 1; repairGantryLevel = 0; broadcastingArrayLevel = 1;
+    ore = 0;
+    gas = 0;
+    crystals = 0;
+    hangarLevel = 1;
+    relayLevel = 1;
+    serverFarmLevel = 0;
+    tradeDepotLevel = 1;
+    repairGantryLevel = 0;
+    broadcastingArrayLevel = 1;
     hasNamedCompany = false;
     fleet = [];
     missionLogs = [];
@@ -567,7 +646,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
   void _triggerUpdate() {
     // NEW: Do not trigger an auto-save if we are still initializing
-    if (companyName == "Establishing Link..." || companyName == "Searching Registry...") {
+    if (companyName == "Establishing Link..." ||
+        companyName == "Searching Registry...") {
       debugPrint("💾 SAVE BLOCKED: Still in link-establishment phase.");
       return;
     }
@@ -577,9 +657,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
 
-
-
   int get maxFleetSize => hangarLevel == 1 ? 2 : hangarLevel * 2;
+
   int get maxStorage => (tradeDepotLevel * 500) + (tradeDepotPrestige * 100);
 
   bool isClassUnlocked(String shipClass) {
@@ -599,7 +678,9 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
   // UI-facing bonus summaries
   int get tradeDepotAutoSellPriceBonusPct => tradeDepotLevel * 5;
+
   int get tradeDepotAutoSellVolumeBonusPct => tradeDepotLevel * 1;
+
   int get tradeDepotAutoSellQuotaUnitsPerTickBase {
     final basePercent = tradeDepotLevel * 0.01;
     return (maxStorage * basePercent).round();
@@ -609,7 +690,9 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     final perCat = 2 + ((broadcastingArrayLevel - 1) * 2);
     return perCat.clamp(2, 10);
   }
+
   int get bonusContractsPerCategory => contractsPerCategory - 2;
+
   double get broadcastingArrayValueBonusPct => broadcastingArrayPrestige * 0.1;
 
   double get repairCostMultiplier {
@@ -626,12 +709,12 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       final now = DateTime.now();
       bool changesMade = false;
 
-        if (nextMissionRefresh == null) {
-          generateNewMissions();
-        } else if (now.isAfter(nextMissionRefresh!)) {
-          generateNewMissions();
-          changesMade = true;
-        }
+      if (nextMissionRefresh == null) {
+        generateNewMissions();
+      } else if (now.isAfter(nextMissionRefresh!)) {
+        generateNewMissions();
+        changesMade = true;
+      }
 
       for (var ship in fleet) {
         if (ship.missionEndTime != null && now.isAfter(ship.missionEndTime!)) {
@@ -670,7 +753,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
     // Start the Trading Hub loop (same as you had)
     _tradingService.startTradingLoop(
-      requestCurrentState: () => {
+      requestCurrentState: () =>
+      {
         'level': tradeDepotLevel,
         'maxStorage': maxStorage,
         'ore': ore,
@@ -704,7 +788,9 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       isPositive: true,
     ));
 
-    ore = 0; gas = 0; crystals = 0;
+    ore = 0;
+    gas = 0;
+    crystals = 0;
     solars += revenue;
     _triggerUpdate();
   }
@@ -715,7 +801,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       _addLog(LogEntry(
         timestamp: DateTime.now(),
         title: "Repair Complete",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} maintenance finished. Hull at 100%.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship
+            .nickname} maintenance finished. Hull at 100%.",
       ));
     } else if (ship.currentTask == 'Upgrading') {
       if (ship.isMaxed) {
@@ -728,7 +815,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         _addLog(LogEntry(
           timestamp: DateTime.now(),
           title: "ELITE TRANSFORMATION",
-          details: "${ship.nickname} has achieved Elite Status. Attributes Gained: Vanguard Honorarium, Priority Docking, Bleeding Edge Tech, and Legacy Designation",
+          details: "${ship
+              .nickname} has achieved Elite Status. Attributes Gained: Vanguard Honorarium, Priority Docking, Bleeding Edge Tech, and Legacy Designation",
           isPositive: true,
         ));
       } else {
@@ -784,7 +872,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       _addLog(LogEntry(
         timestamp: now,
         title: "Contract Launched",
-        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship.nickname} sent to ${mission.title}.",
+        details: "${ship.isMaxed ? '[Elite] ' : ''}${ship
+            .nickname} sent to ${mission.title}.",
         isPositive: true,
       ));
       milestoneService.requestCheck(this);
@@ -793,8 +882,7 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _processMissionCompletion(Ship ship) {
-    totalContracts++;
-
+    // 1. Calculate results first
     final results = GameFormulas.calculateFullMissionResults(
       pendingReward: ship.pendingReward,
       pendingResource: ship.pendingResource,
@@ -807,50 +895,41 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       maxStorage: maxStorage,
     );
 
+    // 2. Track LIFETIME stats for milestones
+    totalContractsCompleted++;
+    if (results.resourceType == 'Ore')
+      totalOreHarvested += results.resourceAmount;
+    if (results.resourceType == 'Gas')
+      totalGasHarvested += results.resourceAmount;
+    if (results.resourceType == 'Crystals')
+      totalCrystalsHarvested += results.resourceAmount;
+
+    // 3. Update the Wallet and Inventory
     solars += results.totalSolars;
+    if (results.resourceType == 'Ore') ore += results.resourceAmount;
+    if (results.resourceType == 'Gas') gas += results.resourceAmount;
+    if (results.resourceType == 'Crystals') crystals += results.resourceAmount;
 
-    if (results.resourceAmount > 0) {
-      switch (results.resourceType) {
-        case 'Ore':
-          ore += results.resourceAmount;
-          break;
-        case 'Gas':
-          gas += results.resourceAmount;
-          break;
-        case 'Crystals':
-          crystals += results.resourceAmount;
-          break;
-      }
-    }
-
-    String earnings = "⁂${results.baseReward}";
-    if (results.brandReachBonus > 0) earnings += " + ⁂${results.brandReachBonus} (Brand Reach)";
-    if (results.vanguardHonorarium > 0) earnings += " + ⁂${results.vanguardHonorarium} (Vanguard Honorarium)";
-
-    if (results.resourceAmount > 0) {
-      earnings += " + ${results.resourceAmount}m³ ${results.resourceType}";
-    }
-
-    if (results.overflowSolars > 0) {
-      earnings += "\n⚠️ Storage Full: ${results.resourceType} sold for ⁂${results.overflowSolars}";
-    }
-
-    _applyHullWear(ship);
-    milestoneService.requestCheck(this);
-
+    // 4. Create the log with DISTANCE
     _addLog(LogEntry(
       timestamp: DateTime.now(),
       title: "Contract Completed: ${ship.nickname}",
-      details: "Earnings: $earnings",
+      details: "Earnings: ⁂${results.totalSolars} and ${results
+          .resourceAmount}m³ ${results.resourceType}",
       isPositive: true,
+      distance: ship.missionDistance ?? 0.0, // Assumes Ship has missionDistance
     ));
 
+    _applyHullWear(ship);
+    milestoneService.requestCheck(this); // Trigger the 5s debouncer
     ship.clearMissionData();
     _triggerUpdate();
   }
 
   int getResourcePrice(String resource) {
-    double variance = 1.0 + (sin(DateTime.now().minute / 10) * 0.2);
+    double variance = 1.0 + (sin(DateTime
+        .now()
+        .minute / 10) * 0.2);
     if (resource == 'Ore') return (10 * variance).toInt();
     if (resource == 'Gas') return (25 * variance).toInt();
     if (resource == 'Crystals') return (100 * variance).toInt();
@@ -860,9 +939,18 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   void sellResource(String resource, int amount) {
     int total = getResourcePrice(resource) * amount;
     bool sold = false;
-    if (resource == 'Ore' && ore >= amount) { ore -= amount; sold = true; }
-    else if (resource == 'Gas' && gas >= amount) { gas -= amount; sold = true; }
-    else if (resource == 'Crystals' && crystals >= amount) { crystals -= amount; sold = true; }
+    if (resource == 'Ore' && ore >= amount) {
+      ore -= amount;
+      sold = true;
+    }
+    else if (resource == 'Gas' && gas >= amount) {
+      gas -= amount;
+      sold = true;
+    }
+    else if (resource == 'Crystals' && crystals >= amount) {
+      crystals -= amount;
+      sold = true;
+    }
 
     if (sold) {
       solars += total;
@@ -892,7 +980,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     solars -= cost;
     s.isRepairing = true;
     s.currentTask = 'Repairing';
-    s.busyUntil = DateTime.now().add(GameFormulas.calculateRepairDuration(s, repairSpeedMultiplier));
+    s.busyUntil = DateTime.now().add(
+        GameFormulas.calculateRepairDuration(s, repairSpeedMultiplier));
 
     _addLog(LogEntry(
       timestamp: DateTime.now(),
@@ -908,13 +997,24 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   void repairAllShips() {
     int total = 0;
     for (var s in fleet) {
-      if (s.condition < 1.0 && s.busyUntil == null && s.missionEndTime == null) {
+      if (s.condition < 1.0 && s.busyUntil == null &&
+          s.missionEndTime == null) {
         int cost = getRepairCost(s);
-        if (solars >= cost) { solars -= cost; total += cost; s.busyUntil = DateTime.now().add(GameFormulas.calculateRepairDuration(s, repairSpeedMultiplier)); s.currentTask = 'Repairing'; }
+        if (solars >= cost) {
+          solars -= cost;
+          total += cost;
+          s.busyUntil = DateTime.now().add(
+              GameFormulas.calculateRepairDuration(s, repairSpeedMultiplier));
+          s.currentTask = 'Repairing';
+        }
       }
     }
     if (total > 0) {
-      _addLog(LogEntry(timestamp: DateTime.now(), title: "Fleet Maintenance", details: "Batch repair executed. Total: ⁂$total.", solarChange: -total, isPositive: false));
+      _addLog(LogEntry(timestamp: DateTime.now(),
+          title: "Fleet Maintenance",
+          details: "Batch repair executed. Total: ⁂$total.",
+          solarChange: -total,
+          isPositive: false));
       _triggerUpdate();
     }
   }
@@ -925,21 +1025,41 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     final s = fleet[idx];
     if (s.busyUntil != null || s.missionEndTime != null) return false;
 
-    int cur = 0, mx = 0;
-    if (stat == 'speed') { cur = s.speed; mx = s.maxSpeed; }
-    else if (stat == 'cargo') { cur = s.cargoCapacity; mx = s.maxCargo; }
-    else if (stat == 'fuel') { cur = s.fuelCapacity; mx = s.maxFuel; }
-    else if (stat == 'shield') { cur = s.shieldLevel; mx = s.maxShield; }
-    else if (stat == 'ai') { cur = s.aiLevel; mx = s.maxAI; }
+    int cur = 0,
+        mx = 0;
+    if (stat == 'speed') {
+      cur = s.speed;
+      mx = s.maxSpeed;
+    }
+    else if (stat == 'cargo') {
+      cur = s.cargoCapacity;
+      mx = s.maxCargo;
+    }
+    else if (stat == 'fuel') {
+      cur = s.fuelCapacity;
+      mx = s.maxFuel;
+    }
+    else if (stat == 'shield') {
+      cur = s.shieldLevel;
+      mx = s.maxShield;
+    }
+    else if (stat == 'ai') {
+      cur = s.aiLevel;
+      mx = s.maxAI;
+    }
 
-    int cost = GameFormulas.calculateUpgradeCost(modelName: s.modelName, currentLevel: cur);
+    int cost = GameFormulas.calculateUpgradeCost(
+        modelName: s.modelName, currentLevel: cur);
     if (solars >= cost && cur < mx) {
       solars -= cost;
       if (stat == 'speed') {
         s.speed++;
-      } else if (stat == 'cargo') s.cargoCapacity++;
-      else if (stat == 'fuel') s.fuelCapacity++;
-      else if (stat == 'shield') s.shieldLevel++;
+      } else if (stat == 'cargo')
+        s.cargoCapacity++;
+      else if (stat == 'fuel')
+        s.fuelCapacity++;
+      else if (stat == 'shield')
+        s.shieldLevel++;
       else if (stat == 'ai') s.aiLevel++;
 
       bool becomingElite = s.isMaxed && !s.renameLocked;
@@ -965,7 +1085,9 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     return false;
   }
 
-  int getRepairCost(Ship s) => ((1.0 - s.condition) * (getShipSaleValue(s) * 0.2) * repairCostMultiplier).toInt();
+  int getRepairCost(Ship s) =>
+      ((1.0 - s.condition) * (getShipSaleValue(s) * 0.2) * repairCostMultiplier)
+          .toInt();
 
   void upgradeBase(String type, int cost) {
     if (solars >= cost) {
@@ -1098,10 +1220,14 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
   void sellShip(String id) {
     final idx = fleet.indexWhere((s) => s.id == id);
-    if (idx != -1 && fleet[idx].missionEndTime == null && fleet[idx].busyUntil == null) {
+    if (idx != -1 && fleet[idx].missionEndTime == null &&
+        fleet[idx].busyUntil == null) {
       int val = getShipSaleValue(fleet[idx]);
       solars += val;
-      _addLog(LogEntry(timestamp: DateTime.now(), title: "Ship Decommissioned", details: "${fleet[idx].nickname} salvaged for ⁂$val.", solarChange: val));
+      _addLog(LogEntry(timestamp: DateTime.now(),
+          title: "Ship Decommissioned",
+          details: "${fleet[idx].nickname} salvaged for ⁂$val.",
+          solarChange: val));
       fleet.removeAt(idx);
       _triggerUpdate();
     }
@@ -1155,7 +1281,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
         break;
     }
 
-    if (newMission != null && !availableMissions.any((m) => m.title == targetTitle)) {
+    if (newMission != null &&
+        !availableMissions.any((m) => m.title == targetTitle)) {
       availableMissions.add(newMission);
     }
   }
@@ -1166,7 +1293,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       final s = fleet[idx];
 
       if (s.renameLocked) {
-        debugPrint("COREY_LOG: Rename blocked. ${s.nickname} is a Legacy vessel.");
+        debugPrint(
+            "COREY_LOG: Rename blocked. ${s.nickname} is a Legacy vessel.");
         return;
       }
 
@@ -1190,7 +1318,8 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   int getTotalRepairCost() {
     int total = 0;
     for (var s in fleet) {
-      if (s.condition < 1.0 && s.busyUntil == null && s.missionEndTime == null) {
+      if (s.condition < 1.0 && s.busyUntil == null &&
+          s.missionEndTime == null) {
         total += getRepairCost(s);
       }
     }
@@ -1226,15 +1355,18 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void generateNewMissions() {
-    updateMissions(_missionService.generateMissions(relayLevel, broadcastingArrayLevel, fleet));
+    updateMissions(_missionService.generateMissions(
+        relayLevel, broadcastingArrayLevel, fleet));
     final now = DateTime.now();
     int currentHour = now.hour;
     int nextHour = (currentHour % 2 == 0) ? currentHour + 2 : currentHour + 1;
     if (nextHour >= 24) {
       final tomorrow = now.add(const Duration(days: 1));
-      nextMissionRefresh = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0);
+      nextMissionRefresh =
+          DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0);
     } else {
-      nextMissionRefresh = DateTime(now.year, now.month, now.day, nextHour, 0, 0);
+      nextMissionRefresh =
+          DateTime(now.year, now.month, now.day, nextHour, 0, 0);
     }
     _triggerUpdate();
   }
@@ -1260,17 +1392,24 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
 
   int getBaseUpgradeCost(String type, int level) {
     switch (type) {
-      case 'Hangar': return (5000 * pow(2, level)).toInt();
-      case 'Relay': return (10000 * pow(2.5, level)).toInt();
-      default: return (2500 * pow(1.8, level)).toInt();
+      case 'Hangar':
+        return (5000 * pow(2, level)).toInt();
+      case 'Relay':
+        return (10000 * pow(2.5, level)).toInt();
+      default:
+        return (2500 * pow(1.8, level)).toInt();
     }
   }
 
   Future<void> nuclearReset() async {
     if (_currentUid == null) return;
     try {
-      await FirebaseFirestore.instance.collection('users').doc(_currentUid).delete();
-      await FirebaseFirestore.instance.collection('leaderboard').doc(_currentUid).delete();
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUid)
+          .delete();
+      await FirebaseFirestore.instance.collection('leaderboard').doc(
+          _currentUid).delete();
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
 
@@ -1278,7 +1417,9 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
       // Service timer cancel is handled by service.stop() if exposed, or auto GC when GameState dies.
 
       solars = 50000;
-      ore = 0; gas = 0; crystals = 0;
+      ore = 0;
+      gas = 0;
+      crystals = 0;
       hangarLevel = 1;
       relayLevel = 1;
       serverFarmLevel = 0;
@@ -1306,24 +1447,23 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-    void debugSimulateOfflineTime(int minutes) {
-      debugPrint("🕒 DEBUG: Simulating $minutes minutes of offline time...");
+  void debugSimulateOfflineTime(int minutes) {
+    debugPrint("🕒 DEBUG: Simulating $minutes minutes of offline time...");
 
-      // 1. Create a fake timestamp in the past
-      final fakeLastActive = DateTime.now().subtract(Duration(minutes: minutes));
+    // 1. Create a fake timestamp in the past
+    final fakeLastActive = DateTime.now().subtract(Duration(minutes: minutes));
 
-      // 2. Force the Trading Service to catch up from that fake time
-      _tradingService.processOfflineCatchup(
-        lastActiveTime: fakeLastActive,
-        tradeDepotLevel: tradeDepotLevel,
-        maxStorage: maxStorage,
-        ore: ore,
-        gas: gas,
-        crystals: crystals,
-      );
+    // 2. Force the Trading Service to catch up from that fake time
+    _tradingService.processOfflineCatchup(
+      lastActiveTime: fakeLastActive,
+      tradeDepotLevel: tradeDepotLevel,
+      maxStorage: maxStorage,
+      ore: ore,
+      gas: gas,
+      crystals: crystals,
+    );
 
-      // 3. Force a UI refresh so you see the logs immediately
-      notifyListeners();
-    }
-
+    // 3. Force a UI refresh so you see the logs immediately
+    notifyListeners();
+  }
 }

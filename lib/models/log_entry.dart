@@ -7,8 +7,7 @@ class LogEntry {
   final int oreSold;
   final int gasSold;
   final int crystalsSold;
-
-  // NEW FIELD: Snapshot the tech level
+  final double distance;
   final int tradeDepotLevel;
 
   LogEntry({
@@ -20,7 +19,8 @@ class LogEntry {
     this.oreSold = 0,
     this.gasSold = 0,
     this.crystalsSold = 0,
-    this.tradeDepotLevel = 1, // Default to 1 for old logs
+    this.tradeDepotLevel = 1,
+    this.distance = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -32,7 +32,8 @@ class LogEntry {
     'oreSold': oreSold,
     'gasSold': gasSold,
     'crystalsSold': crystalsSold,
-    'tradeDepotLevel': tradeDepotLevel, // Save it
+    'tradeDepotLevel': tradeDepotLevel,
+    'distance': distance,
   };
 
   factory LogEntry.fromJson(Map<String, dynamic> json) {
@@ -45,7 +46,8 @@ class LogEntry {
       oreSold: json['oreSold'] ?? 0,
       gasSold: json['gasSold'] ?? 0,
       crystalsSold: json['crystalsSold'] ?? 0,
-      tradeDepotLevel: json['tradeDepotLevel'] ?? 1, // Load it (default 1)
+      tradeDepotLevel: json['tradeDepotLevel'] ?? 1,
+      distance: (json['distance'] as num?)?.toDouble() ?? 0.0, // ✅ ADD THIS LINE
     );
   }
 }

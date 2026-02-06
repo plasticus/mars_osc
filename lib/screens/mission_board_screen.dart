@@ -299,15 +299,22 @@ class MissionCard extends StatelessWidget {
                           Icons.rocket_launch,
                           color: error == null && !isBusy ? Colors.deepOrange : Colors.grey[800]
                       ),
-                        title: Row(
-                          children: [
-                            if (ship.isMaxed) ...[
-                              const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 16),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(ship.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Row(
+                        children: [
+                          if (ship.isMaxed) ...[
+                            const Icon(Icons.shield_moon, color: Colors.cyanAccent, size: 16),
+                            const SizedBox(width: 8),
                           ],
-                        ),
+                          Expanded( // ✅ Added Expanded to constrain the text
+                            child: Text(
+                              ship.nickname,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis, // ✅ Adds "..." if name is too long
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

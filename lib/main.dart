@@ -66,7 +66,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final state = context.watch<GameState>();
@@ -80,7 +82,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 20),
-                  Text("Loading Local Save...", style: TextStyle(color: Colors.grey)),
+                  Text(
+                    "Loading Local Save...",
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ],
               ),
             ),
@@ -93,6 +98,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _lastUid = uid;
           Future.microtask(() async {
             if (!mounted) return;
+
             if (uid != null) {
               await state.connectCloudSession(uid);
 
@@ -101,6 +107,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                 await state.restoreFromCloudIfNewer(force: true);
               }
             }
+
             state.startLoopsIfNeeded();
           });
         }
@@ -117,14 +124,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
             return child!;
           },
-          child: const MainLifecycleWrapper(), // Updated to the Wrapper
+          child: const MainLifecycleWrapper(),
         );
       },
     );
   }
 }
 
-/// NEW WRAPPER: Handles the save-on-exit logic for the whole session
+/// Handles save-on-exit + conflict dialog for the whole session
 class MainLifecycleWrapper extends StatefulWidget {
   const MainLifecycleWrapper({super.key});
 
@@ -132,23 +139,41 @@ class MainLifecycleWrapper extends StatefulWidget {
   State<MainLifecycleWrapper> createState() => _MainLifecycleWrapperState();
 }
 
-class _MainLifecycleWrapperState extends State<MainLifecycleWrapper> with WidgetsBindingObserver {
+class _MainLifecycleWrapperState extends State<MainLifecycleWrapper>
+    with WidgetsBindingObserver {
+  bool _conflictDialogOpen = false;
+
   @override
   void initState() {
-      super.initState();
-      WidgetsBinding.instance.addObserver(this);
-      context.read<GameState>().milestoneService.initializeGlobalListener();
-    }
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    final gs = context.read<GameState>();
+    gs.addListener(() {
+      final conflict = gs.activeConflict;
+      if (conflict != null && !_conflictDialogOpen) {
+        _conflictDialogOpen = true;
+
+        // Ensure dialog opens after build/frame (safer)
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          await _showConflictDialog(context, gs, conflict);
+          _conflictDialogOpen = false;
+        });
+      }
+    });
+
+    context.read<GameState>().milestoneService.initializeGlobalListener();
+  }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // Clean up
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Accessing GameState via context.read to trigger the cloud sync
     if (state == AppLifecycleState.paused) {
       debugPrint("🛰️ LIFECYCLE: App minimized. Pushing Registry to cloud...");
       context.read<GameState>().uploadLocalSaveToCloud();
@@ -168,7 +193,8 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> with AutomaticKeepAliveClientMixin {
+class _MainNavigationScreenState extends State<MainNavigationScreen>
+    with AutomaticKeepAliveClientMixin {
   int _selectedIndex = 0;
 
   @override
@@ -185,6 +211,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Automa
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
     final state = context.watch<GameState>();
 
     final List<Widget> screens = [
@@ -205,9 +232,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Automa
               child: Text(
                 "⁂ ${state.solars}",
                 style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orangeAccent
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orangeAccent,
                 ),
               ),
             ),
@@ -221,9 +248,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Automa
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+          setState(() => _selectedIndex = index);
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.deepOrange,
@@ -238,4 +263,99 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Automa
       ),
     );
   }
+}
+
+// Helper to keep the dialog code clean
+Widget _buildChoiceCard(
+  String label,
+  DateTime time,
+  int worth,
+  int contracts,
+  Color color,
+) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      border: Border.all(color: color.withOpacity(0.5)),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: color, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          "Saved: ${time.hour}:${time.minute.toString().padLeft(2, '0')}",
+          style: const TextStyle(fontSize: 12),
+        ),
+        Text(
+          "Net Worth: ⁂$worth",
+          style: const TextStyle(fontSize: 12),
+        ),
+        Text(
+          "Contracts: $contracts",
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _showConflictDialog(
+  BuildContext context,
+  GameState state,
+  SaveConflict conflict,
+) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      title: const Text(
+        "TIMELINE DISCREPANCY",
+        style: TextStyle(color: Colors.orangeAccent),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildChoiceCard(
+            "PHONE (Local)",
+            conflict.localTime,
+            conflict.localNetWorth,
+            conflict.localContracts,
+            Colors.blue,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Icon(Icons.compare_arrows, color: Colors.grey),
+          ),
+          _buildChoiceCard(
+            "RELAY (Cloud)",
+            conflict.cloudTime,
+            conflict.cloudNetWorth,
+            conflict.cloudContracts,
+            Colors.green,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            state.resolveConflict(useCloud: false);
+          },
+          child: const Text("KEEP PHONE"),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            state.resolveConflict(useCloud: true);
+          },
+          child: const Text("RESTORE CLOUD"),
+        ),
+      ],
+    ),
+  );
 }
