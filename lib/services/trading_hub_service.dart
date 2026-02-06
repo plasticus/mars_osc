@@ -79,6 +79,7 @@ class TradingHubService {
         details: "Remaining: ${ore - soldOre} Ore | ${gas - soldGas} Gas | ${crystals - soldCrystals} Crystals",
         solarChange: revenue,
         isPositive: true,
+        tradeDepotLevel: tradeDepotLevel,
         // Pass data for chips
         oreSold: soldOre,
         gasSold: soldGas,
@@ -152,7 +153,7 @@ class TradingHubService {
           oreSold: soldOre,
           gasSold: soldGas,
           crystalsSold: soldCrystals,
-          tradeDepotLevel: tradeDepotLevel, // <--- SNAPSHOT LEVEL
+          tradeDepotLevel: tradeDepotLevel,
         )
       );
     }
