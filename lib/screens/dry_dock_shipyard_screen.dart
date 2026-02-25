@@ -16,30 +16,43 @@ class DryDockShipyardScreen extends StatelessWidget {
       length: shipClasses.length,
       child: Scaffold(
         appBar: AppBar(
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("SHIPYARD CATALOG"),
-              Text("⁂ ${state.solars}", style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-            ],
-          ),
-          bottom: TabBar(
-            isScrollable: true,
-            tabs: shipClasses.map((c) => Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(c),
-                  if (!state.isClassUnlocked(c)) 
-                    const Padding(
-                      padding: EdgeInsets.only(left: 4.0),
-                      child: Icon(Icons.lock, size: 12, color: Colors.grey),
-                    ),
-                ],
-              ),
-            )).toList(),
-          ),
-        ),
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded( // Squeezes the title so the money fits!
+                        child: Text(
+                          "SHIPYARD CATALOG",
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        "⁂ ${state.solars}",
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16
+                        )
+                      ),
+                    ],
+                  ),
+                  bottom: TabBar(
+                    isScrollable: true,
+                    tabs: shipClasses.map((c) => Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(c),
+                          if (!state.isClassUnlocked(c))
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4.0),
+                              child: Icon(Icons.lock, size: 12, color: Colors.grey),
+                            ),
+                        ],
+                      ),
+                    )).toList(),
+                  ),
+                ), // <-- This closing
         body: TabBarView(
           children: shipClasses.map((className) {
             final isUnlocked = state.isClassUnlocked(className);

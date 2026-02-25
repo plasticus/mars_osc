@@ -47,10 +47,12 @@ class NewUserScreen extends StatelessWidget {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
                   onPressed: () {
-                    // This is where we officially "create" them in the cloud
-                    state.setInitialCompanyName(state.companyName);
+                    // Call the new registration logic we just wrote
+                    state.finalizeNewCorporateRegistration();
                   },
-                  child: const Text("BEGIN OPERATIONS", style: TextStyle(color: Colors.white)),
+                  child: state.isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("BEGIN OPERATIONS", style: TextStyle(color: Colors.white)),
                 ),
               ],
             ],

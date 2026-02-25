@@ -204,36 +204,136 @@ class GameState extends ChangeNotifier with WidgetsBindingObserver {
   } // this closes GameState() Constructor#@!%
 
   Future<void> connectCloudSession(String uid) async {
-    if (_currentUid == uid && _isInitialized) return;
-
     _currentUid = uid;
     isLoading = true;
-    initError = "STATUS: CONTACTING_MARS_RELAY...";
+    initError = null;
     notifyListeners();
 
     try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
-      final snap = await docRef.get();
+      debugPrint("COREY_LOG: Probing cloud for UID: $uid");
 
-      if (!snap.exists) {
-        // BRAND NEW USER: Create the doc with defaults
-        await _ensureUserDefaults(uid);
-        isNewUser = true;
+      // 1. THE PROBE: Fetch the document from Firestore
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        // SCENARIO A: VETERAN FOUND
+        final data = doc.data() as Map<String, dynamic>;
+        debugPrint("COREY_LOG: Veteran found. Checking for SaveBlob...");
+
+        if (data.containsKey('saveBlob')) {
+          // UNPACK THE SUITCASE
+          final Map<String, dynamic> blob = jsonDecode(data['saveBlob']);
+          debugPrint("COREY_LOG: Unpacking saveBlob for ${blob['companyName']}");
+
+          // Restore Core Stats
+          companyName = blob['companyName'] ?? "Unknown Corp";
+          solars = blob['solars'] ?? 50000;
+          ore = blob['ore'] ?? 0;
+          gas = blob['gas'] ?? 0;
+          crystals = blob['crystals'] ?? 0;
+
+          // Restore Building Levels
+          hangarLevel = blob['hangarLevel'] ?? 1;
+          relayLevel = blob['relayLevel'] ?? 1;
+          tradeDepotLevel = blob['tradeDepotLevel'] ?? 1;
+          tradeDepotPrestige = blob['tradeDepotPrestige'] ?? 0;
+          broadcastingArrayLevel = blob['broadcastingArrayLevel'] ?? 1;
+          broadcastingArrayPrestige = blob['broadcastingArrayPrestige'] ?? 0;
+          serverFarmLevel = blob['serverFarmLevel'] ?? 0;
+          serverFarmPrestige = blob['serverFarmPrestige'] ?? 0;
+          repairGantryLevel = blob['repairGantryLevel'] ?? 0;
+
+          // Restore the Fleet using Ship.fromJson
+          if (blob['fleet'] != null) {
+            fleet = (blob['fleet'] as List)
+                .map((s) => Ship.fromJson(s as Map<String, dynamic>))
+                .toList();
+          }
+
+          // Restore Logs if they exist
+          if (blob['missionLogs'] != null) {
+            // Note: If you have a LogEntry.fromJson, map it here.
+            // For now, keeping it as raw list or empty.
+            if (blob['missionLogs'] != null) {
+              missionLogs = (blob['missionLogs'] as List)
+                  .map((entry) => LogEntry.fromJson(entry as Map<String, dynamic>))
+                  .toList();
+            }
+          }
+        } else {
+          // FALLBACK: If there's no blob, use the top-level Firestore fields
+          debugPrint("COREY_LOG: No blob found, falling back to top-level fields.");
+          companyName = data['companyName'] ?? "Establishing Link...";
+          solars = data['solars'] ?? 50000;
+        }
+
+        hasNamedCompany = data['hasNamedCompany'] ?? true;
+        isNewUser = false; // They aren't new if a doc exists!
+
       } else {
-        // RETURNING USER: Do NOT run _ensureUserDefaults yet.
-        // This protects the cloud data so main.dart can restore it.
-        isNewUser = false;
-        debugPrint(
-            "☁️ CLOUD: Account found. Standing by for main.dart restore.");
+        // SCENARIO B: TRUE ROOKIE
+        debugPrint("COREY_LOG: No cloud data. Generating new corporate identity.");
+
+        // Use your generator!
+        companyName = TextGenerators.generateCompanyName();
+        solars = 50000;
+        hasNamedCompany = false;
+        isNewUser = true;
+
+        // Reset everything to base values
+        _resetToDefaults();
+        _setupStarterShip();
       }
 
       isLoading = false;
-      initError = null;
       _isInitialized = true;
+      notifyListeners();
+
+      debugPrint("COREY_LOG: Connection established as $companyName");
+
+    } catch (e) {
+      debugPrint("COREY_LOG: Connection failed: $e");
+      isLoading = false;
+      initError = "COMMS FAILURE: $e";
+      notifyListeners();
+    }
+  }
+
+  // Helper to clear local state for true rookies
+  void _resetToDefaults() {
+    ore = 0; gas = 0; crystals = 0;
+    hangarLevel = 1; relayLevel = 1;
+    tradeDepotLevel = 1;
+    fleet = [];
+    missionLogs = [];
+  }
+
+  Future<void> finalizeNewCorporateRegistration() async {
+    if (_currentUid == null) return;
+
+    try {
+      isLoading = true;
+      notifyListeners();
+
+      // Now we officially write to the cloud for the first time
+      await FirebaseFirestore.instance.collection('users').doc(_currentUid).set({
+        'companyName': companyName,
+        'hasNamedCompany': false, // They haven't paid the 1M to change it yet!
+        'solars': solars,
+        'isNewUser': false,
+        'fleet': fleet.map((s) => s.toJson()).toList(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      isNewUser = false; // Transition them to a regular player
+      isLoading = false;
       notifyListeners();
     } catch (e) {
       isLoading = false;
-      initError = "ERROR: ${e.toString()}";
+      initError = "REGISTRATION FAILED: $e";
       notifyListeners();
     }
   }
